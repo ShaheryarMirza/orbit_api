@@ -1,0 +1,31 @@
+# Python environment
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Local configurations / secrets
+.env
+*.env
+
+# Local Databases
+*.db
+*.sqlite3
+
+# Dynamic customer uploads
+uploads/
+
+# IDE / Editor configurations
+.idea/
+.vscode/
+*.sw?
+*.bak
+
+# OS metadata
+.DS_Store
+Thumbs.db
