@@ -26,6 +26,10 @@ uploads/
 *.sw?
 *.bak
 
+# Agent Instructions / AI Configs
+AGENTS.md
+CLAUDE.md
+
 # OS metadata
 .DS_Store
 Thumbs.db
