@@ -15,7 +15,7 @@ from app.api.test_routes import router as test_router
 from app.api.sage_sync import router as sage_sync_router
 from app.api.users import router as users_router
 from app.api.import_shops import router as import_shops_router
-from app.db.database import get_db, SessionLocal
+from app.db.database import get_db, SessionLocal, Base, engine
 from app.models.user import User
 from app.utils.security import hash_password
 
@@ -50,6 +50,9 @@ app.include_router(import_shops_router)
 
 @app.on_event("startup")
 def seed_root_admin():
+    # Automatically build database tables if they do not exist
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
         admin_user = db.query(User).filter(User.email == "admin@admin.com").first()
