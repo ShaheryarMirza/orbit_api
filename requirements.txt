@@ -9,3 +9,5 @@ python-jose
 passlib
 bcrypt==4.0.1
 python-multipart
+pandas
+openpyxl
