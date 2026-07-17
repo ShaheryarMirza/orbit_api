@@ -117,6 +117,7 @@ def register(payload: RegisterRequest, db: Annotated[Session, Depends(get_db)]) 
         user_id=user.id,
         company_name=payload.shop.company_name.strip(),
         phone_number=payload.shop.phone_number.strip(),
+        contact_name=payload.full_name.strip(),
         address=payload.shop.address.strip(),
         address_line_2=(
             payload.shop.address_line_2.strip()

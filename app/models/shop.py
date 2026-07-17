@@ -25,6 +25,9 @@ class Shop(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     company_name = Column(String(255), nullable=False)
     phone_number = Column(String(50), nullable=False)
+    contact_name = Column(String(255), nullable=True)
+    telephone_2 = Column(String(50), nullable=True)
+    telephone_3 = Column(String(50), nullable=True)
     address = Column(String(500), nullable=False)
     address_line_2 = Column(String(255), nullable=True)
     postcode = Column(String(20), nullable=False)
@@ -40,6 +43,7 @@ class Shop(Base):
         server_default=ShopApprovalStatus.PENDING.value,
     )
     is_approved = Column(Boolean, nullable=False, default=False, server_default="false")
+    needs_sage_sync = Column(Boolean, nullable=False, default=False, server_default="false")
     sage_customer_id = Column(String(100), nullable=True)
     account_ref = Column(String(100), nullable=False, unique=True, index=True)
     sage_sync_status = Column(

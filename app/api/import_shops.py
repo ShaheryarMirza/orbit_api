@@ -62,6 +62,9 @@ def import_shops(
     col_name = find_column(df, ["company name", "companyname", "company_name", "name", "customer name", "customer_name"])
     col_email = find_column(df, ["email", "email address", "emailaddress", "contact email", "contact_email"])
     col_phone = find_column(df, ["phone", "phone number", "phone_number", "telephone", "tel", "tel number"])
+    col_contact = find_column(df, ["contact name", "contactname", "contact_name", "contact", "primary contact", "primary_contact"])
+    col_tel2 = find_column(df, ["telephone 2", "telephone2", "phone 2", "phone_2", "tel 2", "tel_2", "telephone_2"])
+    col_tel3 = find_column(df, ["telephone 3", "telephone3", "phone 3", "phone_3", "tel 3", "tel_3", "telephone_3"])
     col_address1 = find_column(df, ["address 1", "address1", "address_line_1", "address line 1", "address"])
     col_address2 = find_column(df, ["address 2", "address2", "address_line_2", "address line 2"])
     col_town = find_column(df, ["town", "city", "town/city", "city/town"])
@@ -89,7 +92,7 @@ def import_shops(
     errors = []
 
     # Temporary default password
-    temp_password = "Welcome2026#"
+    temp_password = "Orbit@123"
     hashed_temp_pw = hash_password(temp_password)
 
     for index, row in df.iterrows():
@@ -109,6 +112,9 @@ def import_shops(
             # Optional / default columns
             ref_val = str(row[col_ref]).strip().upper() if col_ref and pd.notna(row[col_ref]) else ""
             phone_val = str(row[col_phone]).strip() if col_phone and pd.notna(row[col_phone]) else "0"
+            contact_val = str(row[col_contact]).strip() if col_contact and pd.notna(row[col_contact]) else None
+            tel2_val = str(row[col_tel2]).strip() if col_tel2 and pd.notna(row[col_tel2]) else None
+            tel3_val = str(row[col_tel3]).strip() if col_tel3 and pd.notna(row[col_tel3]) else None
             address1_val = str(row[col_address1]).strip() if col_address1 and pd.notna(row[col_address1]) else "Unknown"
             address2_val = str(row[col_address2]).strip() if col_address2 and pd.notna(row[col_address2]) else None
             town_val = str(row[col_town]).strip() if col_town and pd.notna(row[col_town]) else "Unknown"
@@ -138,13 +144,18 @@ def import_shops(
             if user:
                 # Update existing user role/permissions to shop_owner
                 user.role = "shop_owner"
-                user.must_change_password = True
+                user.must_change_password = False
+                if contact_val:
+                    user.name = contact_val
                 
                 # Check for shop
                 shop = db.query(Shop).filter(Shop.user_id == user.id).first()
                 if shop:
                     shop.company_name = company_name_val
+                    shop.contact_name = contact_val or shop.contact_name or company_name_val
                     shop.phone_number = phone_val
+                    shop.telephone_2 = tel2_val or shop.telephone_2
+                    shop.telephone_3 = tel3_val or shop.telephone_3
                     shop.address = address1_val
                     shop.address_line_2 = address2_val
                     shop.postcode = postcode_val
@@ -152,6 +163,7 @@ def import_shops(
                     shop.country = country_val
                     shop.fax = fax_val
                     shop.website = website_val
+                    shop.company_registration_number = reg_val or shop.company_registration_number
                     shop.account_ref = ref_val
                     shop.approval_status = ShopApprovalStatus.APPROVED.value
                     shop.sage_sync_status = SageSyncStatus.SYNCED.value
@@ -159,7 +171,10 @@ def import_shops(
                     shop = Shop(
                         user_id=user.id,
                         company_name=company_name_val,
+                        contact_name=contact_val or company_name_val,
                         phone_number=phone_val,
+                        telephone_2=tel2_val,
+                        telephone_3=tel3_val,
                         address=address1_val,
                         address_line_2=address2_val,
                         postcode=postcode_val,
@@ -167,6 +182,7 @@ def import_shops(
                         country=country_val,
                         fax=fax_val,
                         website=website_val,
+                        company_registration_number=reg_val,
                         account_ref=ref_val,
                         approval_status=ShopApprovalStatus.APPROVED.value,
                         sage_sync_status=SageSyncStatus.SYNCED.value,
@@ -176,12 +192,12 @@ def import_shops(
             else:
                 # Create User
                 user = User(
-                    name=company_name_val,
+                    name=contact_val or company_name_val,
                     email=email_val,
                     password_hash=hashed_temp_pw,
                     role="shop_owner",
                     is_active=True,
-                    must_change_password=True,
+                    must_change_password=False,
                 )
                 db.add(user)
                 db.flush()
@@ -190,7 +206,10 @@ def import_shops(
                 shop = Shop(
                     user_id=user.id,
                     company_name=company_name_val,
+                    contact_name=contact_val or company_name_val,
                     phone_number=phone_val,
+                    telephone_2=tel2_val,
+                    telephone_3=tel3_val,
                     address=address1_val,
                     address_line_2=address2_val,
                     postcode=postcode_val,
@@ -198,6 +217,7 @@ def import_shops(
                     country=country_val,
                     fax=fax_val,
                     website=website_val,
+                    company_registration_number=reg_val,
                     account_ref=ref_val,
                     approval_status=ShopApprovalStatus.APPROVED.value,
                     sage_sync_status=SageSyncStatus.SYNCED.value,

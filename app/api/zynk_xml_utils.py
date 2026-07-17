@@ -175,3 +175,92 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
 
     # Return safely as a decoded UTF-8 string
     return ET.tostring(company, encoding="utf-8").decode("utf-8")
+
+
+def generate_zynk_customer_xml(shops: List) -> str:
+    """
+    Takes a list of shops that need syncing and generates a Zynk-compliant
+    Customer XML payload with updated details, addresses, and telephone fields.
+    """
+    company = ET.Element(
+        "Company",
+        {
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+        }
+    )
+    customers = ET.SubElement(company, "Customers")
+
+    for shop in shops:
+        customer = ET.SubElement(customers, "Customer")
+        
+        unique_id = ET.SubElement(customer, "UniqueId")
+        unique_id.text = str(shop.account_ref)
+        
+        account_ref = ET.SubElement(customer, "AccountReference")
+        account_ref.text = str(shop.account_ref)
+        
+        company_name = ET.SubElement(customer, "CompanyName")
+        company_name.text = str(shop.company_name)
+
+        if shop.contact_name:
+            contact_name = ET.SubElement(customer, "ContactName")
+            contact_name.text = str(shop.contact_name)
+
+        # CustomerInvoiceAddress
+        invoice_address = ET.SubElement(customer, "CustomerInvoiceAddress")
+        inv_addr1 = ET.SubElement(invoice_address, "Address1")
+        inv_addr1.text = str(shop.address)
+        if shop.address_line_2:
+            inv_addr2 = ET.SubElement(invoice_address, "Address2")
+            inv_addr2.text = str(shop.address_line_2)
+        inv_town = ET.SubElement(invoice_address, "Town")
+        inv_town.text = str(shop.city)
+        inv_postcode = ET.SubElement(invoice_address, "Postcode")
+        inv_postcode.text = str(shop.postcode)
+        inv_country = ET.SubElement(invoice_address, "Country")
+        inv_country.text = str(shop.country)
+        inv_tel = ET.SubElement(invoice_address, "Telephone")
+        inv_tel.text = str(shop.phone_number)
+        if shop.telephone_2:
+            inv_tel2 = ET.SubElement(invoice_address, "Telephone2")
+            inv_tel2.text = str(shop.telephone_2)
+        if shop.telephone_3:
+            inv_tel3 = ET.SubElement(invoice_address, "Telephone3")
+            inv_tel3.text = str(shop.telephone_3)
+        if shop.user and shop.user.email:
+            inv_email = ET.SubElement(invoice_address, "Email")
+            inv_email.text = str(shop.user.email)
+        if shop.contact_name:
+            inv_contact = ET.SubElement(invoice_address, "ContactName")
+            inv_contact.text = str(shop.contact_name)
+
+        # CustomerDeliveryAddress
+        delivery_address = ET.SubElement(customer, "CustomerDeliveryAddress")
+        del_addr1 = ET.SubElement(delivery_address, "Address1")
+        del_addr1.text = str(shop.address)
+        if shop.address_line_2:
+            del_addr2 = ET.SubElement(delivery_address, "Address2")
+            del_addr2.text = str(shop.address_line_2)
+        del_town = ET.SubElement(delivery_address, "Town")
+        del_town.text = str(shop.city)
+        del_postcode = ET.SubElement(delivery_address, "Postcode")
+        del_postcode.text = str(shop.postcode)
+        del_country = ET.SubElement(delivery_address, "Country")
+        del_country.text = str(shop.country)
+        del_tel = ET.SubElement(delivery_address, "Telephone")
+        del_tel.text = str(shop.phone_number)
+        if shop.telephone_2:
+            del_tel2 = ET.SubElement(delivery_address, "Telephone2")
+            del_tel2.text = str(shop.telephone_2)
+        if shop.telephone_3:
+            del_tel3 = ET.SubElement(delivery_address, "Telephone3")
+            del_tel3.text = str(shop.telephone_3)
+        if shop.user and shop.user.email:
+            del_email = ET.SubElement(delivery_address, "Email")
+            del_email.text = str(shop.user.email)
+        if shop.contact_name:
+            del_contact = ET.SubElement(delivery_address, "ContactName")
+            del_contact.text = str(shop.contact_name)
+
+    return ET.tostring(company, encoding="utf-8").decode("utf-8")

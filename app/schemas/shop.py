@@ -8,6 +8,9 @@ from app.models.shop import ShopApprovalStatus
 class ShopCreate(BaseModel):
     company_name: str = Field(min_length=1, max_length=255)
     phone_number: str = Field(min_length=1, max_length=50)
+    contact_name: str | None = Field(default=None, max_length=255)
+    telephone_2: str | None = Field(default=None, max_length=50)
+    telephone_3: str | None = Field(default=None, max_length=50)
     address: str = Field(min_length=1, max_length=500)
     address_line_2: str | None = Field(default=None, max_length=255)
     postcode: str = Field(min_length=1, max_length=20)
@@ -24,6 +27,9 @@ class ShopResponse(BaseModel):
     user_id: int
     company_name: str
     phone_number: str
+    contact_name: str | None
+    telephone_2: str | None
+    telephone_3: str | None
     address: str
     address_line_2: str | None
     postcode: str
@@ -33,6 +39,8 @@ class ShopResponse(BaseModel):
     fax: str | None
     website: str | None
     approval_status: str
+    is_approved: bool
+    needs_sage_sync: bool
     sage_customer_id: str | None
     account_ref: str
     sage_sync_status: str
@@ -40,6 +48,20 @@ class ShopResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ShopProfileUpdate(BaseModel):
+    company_name: str = Field(min_length=1, max_length=255)
+    contact_name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=1, max_length=255)
+    address: str = Field(min_length=1, max_length=500)
+    address_line_2: str | None = Field(default=None, max_length=255)
+    postcode: str = Field(min_length=1, max_length=20)
+    city: str = Field(min_length=1, max_length=100)
+    country: str = Field(min_length=1, max_length=100)
+    phone_number: str = Field(min_length=1, max_length=50)
+    telephone_2: str | None = Field(default=None, max_length=50)
+    telephone_3: str | None = Field(default=None, max_length=50)
 
 
 class ShopApprovalUpdate(BaseModel):

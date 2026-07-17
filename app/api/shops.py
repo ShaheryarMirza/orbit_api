@@ -8,7 +8,7 @@ from app.api.dependencies import require_roles
 from app.db.database import get_db
 from app.models.shop import SageSyncStatus, Shop, ShopApprovalStatus
 from app.models.user import User
-from app.schemas.shop import ShopApprovalUpdate, ShopCreate, ShopListResponse, ShopResponse
+from app.schemas.shop import ShopApprovalUpdate, ShopCreate, ShopListResponse, ShopResponse, ShopProfileUpdate
 
 
 router = APIRouter(tags=["shops"])
@@ -204,6 +204,53 @@ def update_shop_approval(
     shop.approval_status = payload.approval_status.value
     if payload.account_ref is not None:
         shop.account_ref = payload.account_ref.strip() or None
+    db.commit()
+    db.refresh(shop)
+    return shop
+
+
+@router.patch("/shops/profile", response_model=ShopResponse)
+def update_shop_profile(
+    payload: ShopProfileUpdate,
+    current_user: Annotated[User, Depends(require_roles("shop_owner"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Shop:
+    shop = db.query(Shop).filter(Shop.user_id == current_user.id).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Shop registration not found",
+        )
+
+    # Email uniqueness check if changing email
+    email = payload.email.strip().lower()
+    if email != current_user.email:
+        existing_user = db.query(User).filter(User.email == email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is already in use by another account",
+            )
+        current_user.email = email
+
+    # Update user name too
+    current_user.name = payload.contact_name.strip()
+
+    # Update shop properties
+    shop.company_name = payload.company_name.strip()
+    shop.contact_name = payload.contact_name.strip()
+    shop.address = payload.address.strip()
+    shop.address_line_2 = payload.address_line_2.strip() if payload.address_line_2 else None
+    shop.postcode = payload.postcode.strip()
+    shop.city = payload.city.strip()
+    shop.country = payload.country.strip()
+    shop.phone_number = payload.phone_number.strip()
+    shop.telephone_2 = payload.telephone_2.strip() if payload.telephone_2 else None
+    shop.telephone_3 = payload.telephone_3.strip() if payload.telephone_3 else None
+
+    # Track Sage Sync
+    shop.needs_sage_sync = True
+
     db.commit()
     db.refresh(shop)
     return shop

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel
 import xml.etree.ElementTree as ET
 
 from app.db.database import get_db
 from app.models.order import Order, OrderStatus, OrderSageSyncStatus
-from app.api.zynk_xml_utils import generate_zynk_sales_order_xml
+from app.models.shop import Shop
+from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml
 import os
 
 router = APIRouter(tags=["Sage Sync"])
@@ -136,3 +138,40 @@ def test_sage_connection(
     token: str = Depends(verify_zynk_token)
 ):
     return {"status": "success", "message": "Zynk is successfully authenticated with the backend!"}
+
+
+class CustomersSyncSuccessRequest(BaseModel):
+    account_refs: list[str]
+
+
+@router.get("/api/sage/customers/pending")
+def get_pending_customers_for_zynk(
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_zynk_token)
+):
+    # Fetch all shops that need a sync
+    shops = (
+        db.query(Shop)
+        .options(joinedload(Shop.user))
+        .filter(Shop.needs_sage_sync == True)
+        .all()
+    )
+    xml_data = generate_zynk_customer_xml(shops)
+    return Response(content=xml_data, media_type="application/xml")
+
+
+@router.post("/api/sage/customers/success")
+def update_sage_customer_statuses(
+    payload: CustomersSyncSuccessRequest,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_zynk_token)
+):
+    if not payload.account_refs:
+        return {"status": "success", "message": "No account references supplied"}
+
+    # Update needs_sage_sync to False for the specified shops
+    db.query(Shop).filter(Shop.account_ref.in_(payload.account_refs)).update(
+        {Shop.needs_sage_sync: False}, synchronize_session=False
+    )
+    db.commit()
+    return {"status": "success", "message": "Customer sync statuses acknowledged and updated"}
