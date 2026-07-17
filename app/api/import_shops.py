@@ -95,6 +95,9 @@ def import_shops(
     temp_password = "Orbit@123"
     hashed_temp_pw = hash_password(temp_password)
 
+    processed_emails = set()
+    processed_refs = set()
+
     for index, row in df.iterrows():
         try:
             email_val = str(row[col_email]).strip().lower() if col_email and pd.notna(row[col_email]) else ""
@@ -124,50 +127,118 @@ def import_shops(
             website_val = str(row[col_website]).strip() if col_website and pd.notna(row[col_website]) else None
             reg_val = str(row[col_reg]).strip() if col_reg and pd.notna(row[col_reg]) else None
 
-            # Generate OR1xxx ref code if unassigned
-            if not ref_val:
-                all_refs = db.query(Shop.account_ref).filter(Shop.account_ref.like("OR1%")).all()
-                max_num = 1000
-                for ref_tuple in all_refs:
-                    ref = ref_tuple[0]
-                    if ref:
-                        import re
-                        match = re.match(r"^OR1(\d+)$", ref)
-                        if match:
-                            val = int(match.group(1))
-                            if val > max_num:
-                                max_num = val
-                ref_val = f"OR1{max_num + 1}"
+            # 1. Uniqueness check in current batch (in-memory)
+            if email_val in processed_emails:
+                failed_count += 1
+                errors.append(f"Row {index + 2}: Duplicate email '{email_val}' in this spreadsheet.")
+                continue
+            if ref_val and ref_val in processed_refs:
+                failed_count += 1
+                errors.append(f"Row {index + 2}: Duplicate account reference '{ref_val}' in this spreadsheet.")
+                continue
 
-            # Check if user already exists
-            user = db.query(User).filter(User.email == email_val).first()
-            if user:
-                # Update existing user role/permissions to shop_owner
-                user.role = "shop_owner"
-                user.must_change_password = False
-                if contact_val:
-                    user.name = contact_val
-                
-                # Check for shop
-                shop = db.query(Shop).filter(Shop.user_id == user.id).first()
-                if shop:
-                    shop.company_name = company_name_val
-                    shop.contact_name = contact_val or shop.contact_name or company_name_val
-                    shop.phone_number = phone_val
-                    shop.telephone_2 = tel2_val or shop.telephone_2
-                    shop.telephone_3 = tel3_val or shop.telephone_3
-                    shop.address = address1_val
-                    shop.address_line_2 = address2_val
-                    shop.postcode = postcode_val
-                    shop.city = town_val
-                    shop.country = country_val
-                    shop.fax = fax_val
-                    shop.website = website_val
-                    shop.company_registration_number = reg_val or shop.company_registration_number
-                    shop.account_ref = ref_val
-                    shop.approval_status = ShopApprovalStatus.APPROVED.value
-                    shop.sage_sync_status = SageSyncStatus.SYNCED.value
+            processed_emails.add(email_val)
+            if ref_val:
+                processed_refs.add(ref_val)
+
+            # 2. Run row within nested transaction savepoint to isolate database conflicts
+            with db.begin_nested():
+                # Generate OR1xxx ref code if unassigned
+                if not ref_val:
+                    all_refs = db.query(Shop.account_ref).filter(Shop.account_ref.like("OR1%")).all()
+                    max_num = 1000
+                    for ref_tuple in all_refs:
+                        ref = ref_tuple[0]
+                        if ref:
+                            import re
+                            match = re.match(r"^OR1(\d+)$", ref)
+                            if match:
+                                val = int(match.group(1))
+                                if val > max_num:
+                                    max_num = val
+                    ref_val = f"OR1{max_num + 1}"
+                    processed_refs.add(ref_val)
+
+                # Check if user already exists
+                user = db.query(User).filter(User.email == email_val).first()
+                if user:
+                    # Update existing user role/permissions to shop_owner
+                    user.role = "shop_owner"
+                    user.must_change_password = False
+                    if contact_val:
+                        user.name = contact_val
+                    
+                    # Check for shop
+                    shop = db.query(Shop).filter(Shop.user_id == user.id).first()
+                    if shop:
+                        # Check unique constraint if account_ref changes
+                        if ref_val != shop.account_ref:
+                            exist = db.query(Shop).filter(Shop.account_ref == ref_val).first()
+                            if exist:
+                                raise ValueError(f"Account reference '{ref_val}' is already assigned to another B2B shop.")
+                        
+                        shop.company_name = company_name_val
+                        shop.contact_name = contact_val or shop.contact_name or company_name_val
+                        shop.phone_number = phone_val
+                        shop.telephone_2 = tel2_val or shop.telephone_2
+                        shop.telephone_3 = tel3_val or shop.telephone_3
+                        shop.address = address1_val
+                        shop.address_line_2 = address2_val
+                        shop.postcode = postcode_val
+                        shop.city = town_val
+                        shop.country = country_val
+                        shop.fax = fax_val
+                        shop.website = website_val
+                        shop.company_registration_number = reg_val or shop.company_registration_number
+                        shop.account_ref = ref_val
+                        shop.approval_status = ShopApprovalStatus.APPROVED.value
+                        shop.sage_sync_status = SageSyncStatus.SYNCED.value
+                    else:
+                        # Check unique constraint
+                        exist = db.query(Shop).filter(Shop.account_ref == ref_val).first()
+                        if exist:
+                            raise ValueError(f"Account reference '{ref_val}' is already assigned to another B2B shop.")
+                            
+                        shop = Shop(
+                            user_id=user.id,
+                            company_name=company_name_val,
+                            contact_name=contact_val or company_name_val,
+                            phone_number=phone_val,
+                            telephone_2=tel2_val,
+                            telephone_3=tel3_val,
+                            address=address1_val,
+                            address_line_2=address2_val,
+                            postcode=postcode_val,
+                            city=town_val,
+                            country=country_val,
+                            fax=fax_val,
+                            website=website_val,
+                            company_registration_number=reg_val,
+                            account_ref=ref_val,
+                            approval_status=ShopApprovalStatus.APPROVED.value,
+                            sage_sync_status=SageSyncStatus.SYNCED.value,
+                        )
+                        db.add(shop)
+                    updated_count += 1
                 else:
+                    # Check unique constraint
+                    exist = db.query(Shop).filter(Shop.account_ref == ref_val).first()
+                    if exist:
+                        raise ValueError(f"Account reference '{ref_val}' is already assigned to another B2B shop.")
+
+                    # Create User
+                    user = User(
+                        name=contact_val or company_name_val,
+                        email=email_val,
+                        password_hash=hashed_temp_pw,
+                        role="shop_owner",
+                        is_active=True,
+                        must_change_password=False,
+                    )
+                    db.add(user)
+                    db.flush()
+
+                    # Create Shop
                     shop = Shop(
                         user_id=user.id,
                         company_name=company_name_val,
@@ -188,46 +259,20 @@ def import_shops(
                         sage_sync_status=SageSyncStatus.SYNCED.value,
                     )
                     db.add(shop)
-                updated_count += 1
-            else:
-                # Create User
-                user = User(
-                    name=contact_val or company_name_val,
-                    email=email_val,
-                    password_hash=hashed_temp_pw,
-                    role="shop_owner",
-                    is_active=True,
-                    must_change_password=False,
-                )
-                db.add(user)
-                db.flush()
-
-                # Create Shop
-                shop = Shop(
-                    user_id=user.id,
-                    company_name=company_name_val,
-                    contact_name=contact_val or company_name_val,
-                    phone_number=phone_val,
-                    telephone_2=tel2_val,
-                    telephone_3=tel3_val,
-                    address=address1_val,
-                    address_line_2=address2_val,
-                    postcode=postcode_val,
-                    city=town_val,
-                    country=country_val,
-                    fax=fax_val,
-                    website=website_val,
-                    company_registration_number=reg_val,
-                    account_ref=ref_val,
-                    approval_status=ShopApprovalStatus.APPROVED.value,
-                    sage_sync_status=SageSyncStatus.SYNCED.value,
-                )
-                db.add(shop)
-                imported_count += 1
+                    imported_count += 1
+                
+                db.flush() # Force SQL generation to catch unique constraints early
 
         except Exception as exc:
             failed_count += 1
-            errors.append(f"Row {index + 2}: Exception during import - {str(exc)}")
+            # Extract readable DB error detail
+            detail = str(exc)
+            if "duplicate key value violates unique constraint" in detail:
+                if "account_ref" in detail or "shops_account_ref_key" in detail:
+                    detail = f"Account reference '{ref_val}' is already used by another shop."
+                elif "email" in detail or "users_email_key" in detail:
+                    detail = f"Email address '{email_val}' is already used by another user."
+            errors.append(f"Row {index + 2}: Exception during import - {detail}")
 
     db.commit()
 
