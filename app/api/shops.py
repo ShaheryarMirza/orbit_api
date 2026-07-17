@@ -140,7 +140,7 @@ def get_all_shops(
     sage_sync_status: str | None = None,
     search: str | None = None,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=10000, ge=1, le=100000),
 ) -> ShopListResponse:
     approval_status_filter = validate_approval_status_filter(approval_status)
     sage_sync_status_filter = validate_sage_sync_status_filter(sage_sync_status)
