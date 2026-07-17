@@ -202,6 +202,11 @@ def update_shop_approval(
         )
 
     shop.approval_status = payload.approval_status.value
+    if payload.approval_status == ShopApprovalStatus.APPROVED:
+        shop.is_approved = True
+    elif payload.approval_status == ShopApprovalStatus.REJECTED:
+        shop.is_approved = False
+
     if payload.account_ref is not None:
         shop.account_ref = payload.account_ref.strip() or None
     db.commit()
@@ -251,6 +256,37 @@ def update_shop_profile(
     # Track Sage Sync
     shop.needs_sage_sync = True
 
+    db.commit()
+    db.refresh(shop)
+    return shop
+
+
+@router.get("/api/admin/shops/pending", response_model=list[ShopResponse])
+def get_pending_shops(
+    current_user: Annotated[User, Depends(require_roles("admin"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[Shop]:
+    return (
+        db.query(Shop)
+        .filter(Shop.approval_status == ShopApprovalStatus.PENDING.value)
+        .all()
+    )
+
+
+@router.patch("/api/admin/shops/{shop_id}/approve", response_model=ShopResponse)
+def approve_shop_direct(
+    shop_id: int,
+    current_user: Annotated[User, Depends(require_roles("admin"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Shop:
+    shop = db.get(Shop, shop_id)
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Shop registration not found",
+        )
+    shop.approval_status = ShopApprovalStatus.APPROVED.value
+    shop.is_approved = True
     db.commit()
     db.refresh(shop)
     return shop

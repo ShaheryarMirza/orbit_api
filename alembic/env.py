@@ -12,10 +12,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option(
-    "sqlalchemy.url",
-    database_url.render_as_string(hide_password=False),
-)
+if isinstance(database_url, str):
+    config.set_main_option(
+        "sqlalchemy.url",
+        database_url.replace("%", "%%"),
+    )
+else:
+    config.set_main_option(
+        "sqlalchemy.url",
+        database_url.render_as_string(hide_password=False),
+    )
 
 target_metadata = Base.metadata
 
