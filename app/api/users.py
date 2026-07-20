@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import require_roles
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.user import SalespersonCreate, AdminCreate
+from app.schemas.user import SalespersonCreate, AdminCreate, SalespersonUpdate
 from app.schemas.auth import MeResponse
 from app.utils.security import hash_password
 
@@ -147,3 +147,65 @@ def approve_shop(
     shop.approval_status = ShopApprovalStatus.APPROVED.value
     db.commit()
     return {"detail": "Shop approved successfully"}
+
+
+@router.patch(
+    "/salespersons/{user_id}",
+    response_model=MeResponse,
+    summary="Update a salesperson user details",
+    description="Only administrators can edit salesperson accounts."
+)
+def update_salesperson(
+    user_id: int,
+    payload: SalespersonUpdate,
+    current_user: Annotated[User, Depends(require_roles("admin"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    user = db.get(User, user_id)
+    if not user or user.role != "salesperson":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Salesperson not found",
+        )
+        
+    email = payload.email.strip().lower()
+    if email != user.email:
+        existing_user = db.query(User).filter(User.email == email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is already registered",
+            )
+        user.email = email
+
+    user.name = payload.full_name.strip()
+    if payload.password:
+        user.password_hash = hash_password(payload.password)
+        
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete(
+    "/salespersons/{user_id}",
+    response_model=MeResponse,
+    summary="Soft delete (deactivate) a salesperson user",
+    description="Only administrators can deactivate salesperson accounts."
+)
+def delete_salesperson(
+    user_id: int,
+    current_user: Annotated[User, Depends(require_roles("admin"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    user = db.get(User, user_id)
+    if not user or user.role != "salesperson":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Salesperson not found",
+        )
+        
+    user.is_active = False
+    db.commit()
+    db.refresh(user)
+    return user
