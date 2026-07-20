@@ -5,7 +5,7 @@ import os
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.auth import router as auth_router
+from app.api.auth import router as auth_router, api_router as api_auth_router
 from app.api.categories import router as categories_router
 from app.api.orders import admin_router as admin_orders_router
 from app.api.orders import router as orders_router
@@ -15,6 +15,7 @@ from app.api.test_routes import router as test_router
 from app.api.sage_sync import router as sage_sync_router
 from app.api.users import router as users_router
 from app.api.import_shops import router as import_shops_router
+from app.api.password_requests import router as password_requests_router
 from app.db.database import get_db, SessionLocal, Base, engine
 from app.models.user import User
 from app.utils.security import hash_password
@@ -42,6 +43,7 @@ os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(auth_router)
+app.include_router(api_auth_router)
 app.include_router(admin_orders_router)
 app.include_router(categories_router)
 app.include_router(orders_router)
@@ -51,6 +53,7 @@ app.include_router(test_router)
 app.include_router(sage_sync_router)
 app.include_router(users_router)
 app.include_router(import_shops_router)
+app.include_router(password_requests_router)
 
 
 @app.on_event("startup")

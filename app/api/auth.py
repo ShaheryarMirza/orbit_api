@@ -8,7 +8,9 @@ from app.api.dependencies import get_current_user
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.models.shop import Shop, ShopApprovalStatus, SageSyncStatus
+from app.models.password_reset_request import PasswordResetRequest
 from app.schemas.auth import LoginRequest, MeResponse, SignupRequest, TokenResponse, RegisterRequest, ChangePasswordRequest
+from app.schemas.password_request import PasswordResetRequestCreate, PasswordResetRequestResponse
 from app.utils.security import (
     create_access_token,
     hash_password,
@@ -17,6 +19,7 @@ from app.utils.security import (
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+api_router = APIRouter(tags=["api-auth"])
 
 
 def normalize_email(email: str) -> str:
@@ -217,3 +220,26 @@ def change_password(
         
     db.commit()
     return {"detail": "Password updated successfully"}
+
+
+@api_router.post(
+    "/api/auth/forgot-password-request",
+    response_model=PasswordResetRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new manual password reset request",
+)
+def create_forgot_password_request(
+    payload: PasswordResetRequestCreate,
+    db: Annotated[Session, Depends(get_db)],
+) -> PasswordResetRequest:
+    req = PasswordResetRequest(
+        account_ref=payload.account_ref.strip().upper(),
+        company_name=payload.company_name.strip(),
+        email=payload.email.strip().lower(),
+        phone_number=payload.phone_number.strip(),
+        status="pending",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return req

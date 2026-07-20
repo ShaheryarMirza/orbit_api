@@ -3,6 +3,7 @@ from app.models.order import DiscountType, Order, OrderItem, OrderSageSyncStatus
 from app.models.product import Product
 from app.models.shop import SageSyncStatus, Shop, ShopApprovalStatus
 from app.models.user import User, UserRole
+from app.models.password_reset_request import PasswordResetRequest
 
 __all__ = [
     "Category",
@@ -18,4 +19,5 @@ __all__ = [
     "SubCategory",
     "User",
     "UserRole",
+    "PasswordResetRequest",
 ]
