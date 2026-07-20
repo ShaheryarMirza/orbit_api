@@ -60,6 +60,18 @@ class SalespersonResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ShopMiniResponse(BaseModel):
+    id: int
+    company_name: str
+    phone_number: str
+    address: str
+    postcode: str
+    city: str
+    account_ref: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OrderResponse(BaseModel):
     id: int
     order_number: str | None
@@ -78,10 +90,12 @@ class OrderResponse(BaseModel):
     status: str
     sage_sales_order_id: str | None
     sage_sync_status: str
+    account_ref: str | None = None
     created_at: datetime
     updated_at: datetime
     items: list[OrderItemResponse]
     salesperson: SalespersonResponse | None = None
+    shop: ShopMiniResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

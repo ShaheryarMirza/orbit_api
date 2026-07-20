@@ -687,7 +687,8 @@ def list_orders(
     query = apply_order_list_filters(
         db.query(Order).options(
             joinedload(Order.salesperson),
-            joinedload(Order.items)
+            joinedload(Order.items),
+            joinedload(Order.shop)
         ),
         search,
         status,
