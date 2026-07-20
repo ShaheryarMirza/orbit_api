@@ -232,10 +232,28 @@ def create_forgot_password_request(
     payload: PasswordResetRequestCreate,
     db: Annotated[Session, Depends(get_db)],
 ) -> PasswordResetRequest:
+    # 1. Query the shop by account_ref
+    ref = payload.account_ref.strip()
+    shop = db.query(Shop).filter(Shop.account_ref.ilike(ref)).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account reference '{payload.account_ref}' was not found. Please contact administration or check your account number.",
+        )
+    
+    # 2. Retrieve associated user email
+    user = shop.user
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No user associated with this shop account.",
+        )
+
+    # 3. Create the password reset request with retrieved company_name and email
     req = PasswordResetRequest(
-        account_ref=payload.account_ref.strip().upper(),
-        company_name=payload.company_name.strip(),
-        email=payload.email.strip().lower(),
+        account_ref=shop.account_ref,
+        company_name=shop.company_name,
+        email=user.email,
         phone_number=payload.phone_number.strip(),
         status="pending",
     )

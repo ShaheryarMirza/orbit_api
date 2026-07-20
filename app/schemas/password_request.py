@@ -4,8 +4,6 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class PasswordResetRequestCreate(BaseModel):
     account_ref: str = Field(min_length=1, max_length=100)
-    company_name: str = Field(min_length=1, max_length=255)
-    email: str = Field(min_length=1, max_length=255)
     phone_number: str = Field(min_length=1, max_length=50)
 
 
