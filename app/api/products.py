@@ -505,3 +505,165 @@ def upload_product_image(
     db.commit()
     db.refresh(product)
     return product
+
+
+def find_column(df: pd.DataFrame, possible_names: list[str]) -> str | None:
+    for col in df.columns:
+        if str(col).strip().lower() in possible_names:
+            return col
+    return None
+
+
+@router.post(
+    "/import",
+    response_model=ProductCsvImportResponse,
+    summary="Bulk import products from CSV/Excel",
+    description="Admin-only endpoint for importing products from Excel or CSV.",
+)
+async def import_products(
+    file: Annotated[UploadFile, File(description="Excel or CSV file containing products")],
+    current_user: Annotated[User, Depends(admin_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ProductCsvImportResponse:
+    import io
+    import re
+    import pandas as pd
+    
+    filename = file.filename or ""
+    is_csv = filename.lower().endswith(".csv")
+    is_excel = filename.lower().endswith(".xlsx") or filename.lower().endswith(".xls")
+
+    if not (is_csv or is_excel):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Only Excel (.xlsx, .xls) and CSV (.csv) files are supported."
+        )
+
+    try:
+        contents = await file.read()
+        if is_csv:
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to parse spreadsheet file: {str(exc)}"
+        )
+
+    df.columns = [str(c).strip() for c in df.columns]
+
+    col_cat = find_column(df, ["category", "categories"])
+    col_name = find_column(df, ["name", "product name", "product_name"])
+    col_desc = find_column(df, ["description", "product description", "product_description"])
+    col_price = find_column(df, ["price", "unit price", "unit_price", "price (ex. vat)", "price"])
+    col_image = find_column(df, ["image", "picture url", "picture_url", "image_url", "image url", "pictureurl"])
+
+    if not col_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Spreadsheet must contain a 'Name' or 'Product Name' column."
+        )
+    if not col_price:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Spreadsheet must contain a 'Price' column."
+        )
+
+    errors = []
+    created = 0
+    skipped = 0
+
+    for idx, row in df.iterrows():
+        row_number = idx + 2
+        try:
+            name_val = str(row[col_name]).strip() if pd.notna(row[col_name]) else ""
+            if not name_val:
+                errors.append(ProductCsvImportError(row=row_number, error="Product name is required."))
+                continue
+
+            # Try matching SKU at the beginning: e.g. "00035-03 Ulker Baby Biscuit..."
+            match = re.match(r"^([a-zA-Z0-9\-]+)\s+(.*)$", name_val)
+            if match:
+                product_code = match.group(1).strip()
+                product_name = match.group(2).strip()
+                product_name = re.sub(r"^[\-\:\s]+", "", product_name)
+            else:
+                product_code = name_val
+                product_name = name_val
+
+            if len(product_code) > 100:
+                errors.append(ProductCsvImportError(row=row_number, error="Product code must be 100 characters or fewer."))
+                continue
+            if len(product_name) > 255:
+                errors.append(ProductCsvImportError(row=row_number, error="Product name must be 255 characters or fewer."))
+                continue
+
+            # Parse category
+            cat_val = str(row[col_cat]).strip() if col_cat and pd.notna(row[col_cat]) else ""
+            category_id = None
+            if cat_val:
+                category = db.query(Category).filter(Category.name.ilike(cat_val)).first()
+                if not category:
+                    category = Category(
+                        name=cat_val,
+                        slug=cat_val.lower().replace("&", "and").replace(" ", "-").replace("--", "-")
+                    )
+                    db.add(category)
+                    db.flush()
+                category_id = category.id
+
+            # Parse price
+            price_val = Decimal("0.00")
+            if col_price and pd.notna(row[col_price]):
+                price_str = str(row[col_price]).strip().replace("£", "").replace(",", "")
+                try:
+                    price_val = Decimal(price_str)
+                except InvalidOperation:
+                    errors.append(ProductCsvImportError(row=row_number, error="Price must be a valid number."))
+                    continue
+            if price_val < 0:
+                errors.append(ProductCsvImportError(row=row_number, error="Price must be greater than or equal to 0."))
+                continue
+
+            # Parse optional fields
+            desc_val = str(row[col_desc]).strip() if col_desc and pd.notna(row[col_desc]) else None
+            image_val = str(row[col_image]).strip() if col_image and pd.notna(row[col_image]) else None
+
+            # Add or update
+            product = db.query(Product).filter(Product.product_code == product_code).first()
+            if product:
+                product.product_name = product_name
+                product.description = desc_val
+                product.price = price_val
+                if category_id is not None:
+                    product.category_id = category_id
+                if image_val is not None:
+                    product.image_url = image_val
+                db.flush()
+                created += 1
+            else:
+                product = Product(
+                    product_code=product_code,
+                    product_name=product_name,
+                    description=desc_val,
+                    price=price_val,
+                    category_id=category_id,
+                    image_url=image_val,
+                    is_active=True,
+                    quantity=0
+                )
+                db.add(product)
+                db.flush()
+                created += 1
+
+        except Exception as exc:
+            errors.append(ProductCsvImportError(row=row_number, error=str(exc)))
+            continue
+
+    db.commit()
+    return ProductCsvImportResponse(
+        created=created,
+        skipped=skipped,
+        errors=errors
+    )
