@@ -192,6 +192,7 @@ def import_shops(
                         shop.company_registration_number = reg_val or shop.company_registration_number
                         shop.account_ref = ref_val
                         shop.approval_status = ShopApprovalStatus.APPROVED.value
+                        shop.is_approved = True
                         shop.sage_sync_status = SageSyncStatus.SYNCED.value
                     else:
                         # Check unique constraint
@@ -216,6 +217,7 @@ def import_shops(
                             company_registration_number=reg_val,
                             account_ref=ref_val,
                             approval_status=ShopApprovalStatus.APPROVED.value,
+                            is_approved=True,
                             sage_sync_status=SageSyncStatus.SYNCED.value,
                         )
                         db.add(shop)
@@ -256,6 +258,7 @@ def import_shops(
                         company_registration_number=reg_val,
                         account_ref=ref_val,
                         approval_status=ShopApprovalStatus.APPROVED.value,
+                        is_approved=True,
                         sage_sync_status=SageSyncStatus.SYNCED.value,
                     )
                     db.add(shop)
