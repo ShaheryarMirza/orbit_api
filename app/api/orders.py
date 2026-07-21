@@ -107,16 +107,18 @@ def build_order_items(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product {product_id} not found",
             )
-        if quantity > product.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Product {product.product_code} has insufficient quantity",
-            )
+        # Treat all active products as having unlimited stock
+        # if quantity > product.quantity:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         detail=f"Product {product.product_code} has insufficient quantity",
+        #     )
 
         unit_price = quantize_money(product.price)
         line_total = quantize_money(unit_price * quantity)
         subtotal += line_total
-        product.quantity -= quantity
+        # Do not decrement stock level since stock control is disabled
+        # product.quantity -= quantity
 
         vat_rate = product_vats.get(product.id, 20.0)
         vat_amount = float(line_total) * (vat_rate / 100.0)
