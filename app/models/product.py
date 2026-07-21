@@ -22,6 +22,7 @@ class Product(Base):
     )
     product_code = Column(String(100), nullable=False, unique=True, index=True)
     product_name = Column(String(255), nullable=False)
+    description = Column(String(1000), nullable=True)
     image_url = Column(String(255), nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     quantity = Column(Integer, nullable=False, default=0, server_default="0")

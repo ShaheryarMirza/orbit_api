@@ -92,6 +92,7 @@ def create_product(
         subcategory_id=payload.subcategory_id,
         product_code=clean_required_text(payload.product_code, "Product code"),
         product_name=clean_required_text(payload.product_name, "Product name"),
+        description=payload.description.strip() if payload.description else None,
         price=payload.price,
         quantity=payload.quantity,
     )
@@ -447,6 +448,8 @@ def update_product(
         product.product_code = clean_required_text(payload.product_code, "Product code")
     if payload.product_name is not None:
         product.product_name = clean_required_text(payload.product_name, "Product name")
+    if "description" in payload.model_fields_set:
+        product.description = payload.description.strip() if payload.description else None
     if payload.price is not None:
         product.price = payload.price
     if payload.quantity is not None:

@@ -9,6 +9,7 @@ class ProductCreate(BaseModel):
     subcategory_id: int | None = Field(default=None, description="Parent subcategory ID")
     product_code: str = Field(min_length=1, max_length=100)
     product_name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
     price: Decimal = Field(ge=0, decimal_places=2)
     quantity: int = Field(default=0, ge=0)
 
@@ -18,6 +19,7 @@ class ProductUpdate(BaseModel):
     subcategory_id: int | None = None
     product_code: str | None = Field(default=None, min_length=1, max_length=100)
     product_name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
     price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     quantity: int | None = Field(default=None, ge=0)
     is_active: bool | None = None
@@ -29,6 +31,7 @@ class ProductResponse(BaseModel):
     subcategory_id: int | None = None
     product_code: str
     product_name: str
+    description: str | None = None
     image_url: str | None = None
     price: Decimal
     quantity: int
