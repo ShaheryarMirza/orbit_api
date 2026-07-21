@@ -125,7 +125,7 @@ def list_products(
     subcategory_slug: str | None = None,
     is_active: bool | None = True,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100000),
 ) -> ProductListResponse:
     query = db.query(Product)
 
@@ -145,6 +145,7 @@ def list_products(
             or_(
                 Product.product_code.ilike(search_pattern),
                 Product.product_name.ilike(search_pattern),
+                Product.description.ilike(search_pattern),
             )
         )
 
