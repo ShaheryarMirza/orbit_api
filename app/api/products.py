@@ -94,6 +94,7 @@ def create_product(
         product_name=clean_required_text(payload.product_name, "Product name"),
         description=payload.description.strip() if payload.description else None,
         price=payload.price,
+        vat_rate=payload.vat_rate if payload.vat_rate is not None else 20.0,
         quantity=payload.quantity,
     )
     db.add(product)
@@ -453,6 +454,8 @@ def update_product(
         product.description = payload.description.strip() if payload.description else None
     if payload.price is not None:
         product.price = payload.price
+    if payload.vat_rate is not None:
+        product.vat_rate = payload.vat_rate
     if payload.quantity is not None:
         product.quantity = payload.quantity
     if payload.is_active is not None:
@@ -558,6 +561,7 @@ async def import_products(
     col_name = find_column(df, ["name", "product name", "product_name"])
     col_desc = find_column(df, ["description", "product description", "product_description"])
     col_price = find_column(df, ["price", "unit price", "unit_price", "price (ex. vat)", "price"])
+    col_vat = find_column(df, ["vat", "vat_rate", "vat rate", "vat %", "vat_percent"])
     col_image = find_column(df, ["image", "picture url", "picture_url", "image_url", "image url", "pictureurl"])
 
     if not col_name:
@@ -627,6 +631,15 @@ async def import_products(
                 errors.append(ProductCsvImportError(row=row_number, error="Price must be greater than or equal to 0."))
                 continue
 
+            # Parse vat_rate
+            vat_val = 20.0
+            if col_vat and pd.notna(row[col_vat]):
+                try:
+                    vat_str = str(row[col_vat]).strip().replace("%", "")
+                    vat_val = float(vat_str)
+                except ValueError:
+                    vat_val = 20.0
+
             # Parse optional fields
             desc_val = str(row[col_desc]).strip() if col_desc and pd.notna(row[col_desc]) else None
             image_val = str(row[col_image]).strip() if col_image and pd.notna(row[col_image]) else None
@@ -637,6 +650,7 @@ async def import_products(
                 product.product_name = product_name
                 product.description = desc_val
                 product.price = price_val
+                product.vat_rate = vat_val
                 if category_id is not None:
                     product.category_id = category_id
                 if image_val is not None:
@@ -649,6 +663,7 @@ async def import_products(
                     product_name=product_name,
                     description=desc_val,
                     price=price_val,
+                    vat_rate=vat_val,
                     category_id=category_id,
                     image_url=image_val,
                     is_active=True,

@@ -11,6 +11,7 @@ class ProductCreate(BaseModel):
     product_name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
     price: Decimal = Field(ge=0, decimal_places=2)
+    vat_rate: float = Field(default=20.0, ge=0)
     quantity: int = Field(default=0, ge=0)
 
 
@@ -21,6 +22,7 @@ class ProductUpdate(BaseModel):
     product_name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
     price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    vat_rate: float | None = Field(default=None, ge=0)
     quantity: int | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
@@ -34,6 +36,7 @@ class ProductResponse(BaseModel):
     description: str | None = None
     image_url: str | None = None
     price: Decimal
+    vat_rate: float = 20.0
     quantity: int
     is_active: bool
     created_at: datetime

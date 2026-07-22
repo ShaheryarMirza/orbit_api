@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -25,6 +25,7 @@ class Product(Base):
     description = Column(String(1000), nullable=True)
     image_url = Column(String(255), nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
+    vat_rate = Column(Float, nullable=False, default=20.0, server_default="20.0")
     quantity = Column(Integer, nullable=False, default=0, server_default="0")
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(

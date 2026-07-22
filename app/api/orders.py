@@ -92,8 +92,6 @@ def build_order_items(
     for item in items:
         if is_assisted and item.vat_rate is not None:
             product_vats[item.product_id] = item.vat_rate
-        else:
-            product_vats[item.product_id] = 20.0
 
     for product_id, quantity in aggregate_items(items).items():
         product = (
@@ -107,20 +105,15 @@ def build_order_items(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product {product_id} not found",
             )
-        # Treat all active products as having unlimited stock
-        # if quantity > product.quantity:
-        #     raise HTTPException(
-        #         status_code=status.HTTP_400_BAD_REQUEST,
-        #         detail=f"Product {product.product_code} has insufficient quantity",
-        #     )
 
         unit_price = quantize_money(product.price)
         line_total = quantize_money(unit_price * quantity)
         subtotal += line_total
-        # Do not decrement stock level since stock control is disabled
-        # product.quantity -= quantity
 
-        vat_rate = product_vats.get(product.id, 20.0)
+        vat_rate = product_vats.get(product.id)
+        if vat_rate is None:
+            vat_rate = float(product.vat_rate) if getattr(product, "vat_rate", None) is not None else 20.0
+
         vat_amount = float(line_total) * (vat_rate / 100.0)
 
         order_items.append(
