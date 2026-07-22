@@ -264,3 +264,52 @@ def generate_zynk_customer_xml(shops: List) -> str:
             del_contact.text = str(shop.contact_name)
 
     return ET.tostring(company, encoding="utf-8").decode("utf-8")
+
+
+def generate_zynk_product_xml(products: List) -> str:
+    """
+    Takes a list of products needing Sage sync and generates an XML string
+    formatted to Zynk Sage 50 Product XML schema.
+    Maps pending_delete status to flag Sage product as Inactive (PublishStatus=Inactive).
+    """
+    company = ET.Element(
+        "Company",
+        {
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+        }
+    )
+    products_node = ET.SubElement(company, "Products")
+
+    for prod in products:
+        product_node = ET.SubElement(products_node, "Product")
+        
+        id_node = ET.SubElement(product_node, "Id")
+        id_node.text = str(prod.id)
+
+        sku_node = ET.SubElement(product_node, "Sku")
+        sku_node.text = str(prod.product_code)
+
+        name_node = ET.SubElement(product_node, "Name")
+        name_node.text = str(prod.product_name)
+
+        if prod.description:
+            desc_node = ET.SubElement(product_node, "Description")
+            desc_node.text = str(prod.description)
+
+        unit_price_node = ET.SubElement(product_node, "UnitPrice")
+        unit_price_node.text = str(prod.price)
+
+        tax_rate_node = ET.SubElement(product_node, "TaxRate")
+        tax_rate_node.text = str(getattr(prod, "vat_rate", 20.0))
+
+        publish_status_node = ET.SubElement(product_node, "PublishStatus")
+        if prod.sage_sync_status == "pending_delete" or not prod.is_active:
+            publish_status_node.text = "Inactive"
+        else:
+            publish_status_node.text = "Active"
+
+        sync_status_node = ET.SubElement(product_node, "SyncStatus")
+        sync_status_node.text = str(prod.sage_sync_status)
+
+    return ET.tostring(company, encoding="utf-8").decode("utf-8")

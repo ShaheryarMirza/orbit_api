@@ -39,6 +39,7 @@ class ProductResponse(BaseModel):
     vat_rate: float = 20.0
     quantity: int
     is_active: bool
+    sage_sync_status: str = "synced"
     created_at: datetime
     updated_at: datetime
 

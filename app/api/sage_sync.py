@@ -7,7 +7,8 @@ import xml.etree.ElementTree as ET
 from app.db.database import get_db
 from app.models.order import Order, OrderStatus, OrderSageSyncStatus
 from app.models.shop import Shop
-from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml
+from app.models.product import Product
+from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml, generate_zynk_product_xml
 import os
 
 router = APIRouter(tags=["Sage Sync"])
@@ -175,3 +176,86 @@ def update_sage_customer_statuses(
     )
     db.commit()
     return {"status": "success", "message": "Customer sync statuses acknowledged and updated"}
+
+
+class ProductsSyncSuccessRequest(BaseModel):
+    product_ids: list[int] | None = None
+    skus: list[str] | None = None
+    product_codes: list[str] | None = None
+
+
+@router.get("/api/sage/products/pending")
+def get_pending_products_for_zynk(
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_zynk_token)
+):
+    products = (
+        db.query(Product)
+        .filter(Product.sage_sync_status != "synced")
+        .all()
+    )
+    xml_data = generate_zynk_product_xml(products)
+    return Response(content=xml_data, media_type="application/xml")
+
+
+@router.post("/api/sage/products/success")
+async def update_sage_product_statuses(
+    request: Request,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_zynk_token)
+):
+    body = await request.body()
+
+    if body:
+        # 1. Try parsing JSON body first
+        try:
+            import json
+            data = json.loads(body)
+            product_ids = data.get("product_ids") or []
+            skus = data.get("skus") or data.get("product_codes") or []
+
+            if product_ids:
+                db.query(Product).filter(Product.id.in_(product_ids)).update(
+                    {Product.sage_sync_status: "synced"}, synchronize_session=False
+                )
+            if skus:
+                db.query(Product).filter(Product.product_code.in_(skus)).update(
+                    {Product.sage_sync_status: "synced"}, synchronize_session=False
+                )
+            db.commit()
+            return {"status": "success", "message": "Product sync statuses updated to synced"}
+        except Exception:
+            pass
+
+        # 2. Fallback: try parsing XML body
+        try:
+            root = ET.fromstring(body)
+            skus_to_update = []
+            ids_to_update = []
+
+            for prod_node in root.iter("Product"):
+                sku_el = prod_node.find("Sku") or prod_node.find("ProductCode")
+                id_el = prod_node.find("Id")
+
+                if sku_el is not None and sku_el.text:
+                    skus_to_update.append(sku_el.text.strip())
+                if id_el is not None and id_el.text:
+                    try:
+                        ids_to_update.append(int(id_el.text.strip()))
+                    except ValueError:
+                        pass
+
+            if ids_to_update:
+                db.query(Product).filter(Product.id.in_(ids_to_update)).update(
+                    {Product.sage_sync_status: "synced"}, synchronize_session=False
+                )
+            if skus_to_update:
+                db.query(Product).filter(Product.product_code.in_(skus_to_update)).update(
+                    {Product.sage_sync_status: "synced"}, synchronize_session=False
+                )
+            db.commit()
+            return {"status": "success", "message": "Product sync statuses updated to synced"}
+        except Exception:
+            pass
+
+    return {"status": "success", "message": "No valid product SKUs or IDs supplied"}

@@ -28,6 +28,7 @@ class Product(Base):
     vat_rate = Column(Float, nullable=False, default=20.0, server_default="20.0")
     quantity = Column(Integer, nullable=False, default=0, server_default="0")
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    sage_sync_status = Column(String(50), nullable=False, default="synced", server_default="synced")
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

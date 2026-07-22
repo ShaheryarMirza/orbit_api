@@ -96,6 +96,7 @@ def create_product(
         price=payload.price,
         vat_rate=payload.vat_rate if payload.vat_rate is not None else 20.0,
         quantity=payload.quantity,
+        sage_sync_status="pending_create",
     )
     db.add(product)
     try:
@@ -461,6 +462,9 @@ def update_product(
     if payload.is_active is not None:
         product.is_active = payload.is_active
 
+    if product.sage_sync_status != "pending_create":
+        product.sage_sync_status = "pending_update"
+
     try:
         db.commit()
     except IntegrityError as exc:
@@ -477,7 +481,7 @@ def update_product(
     "/{product_id}",
     response_model=ProductResponse,
     summary="Soft delete a product",
-    description="Admin-only endpoint. Sets is_active to false.",
+    description="Admin-only endpoint. Sets is_active to false and sage_sync_status to pending_delete.",
 )
 def delete_product(
     product_id: int,
@@ -486,6 +490,7 @@ def delete_product(
 ) -> Product:
     product = get_active_product_or_404(product_id, db)
     product.is_active = False
+    product.sage_sync_status = "pending_delete"
     db.commit()
     db.refresh(product)
     return product
