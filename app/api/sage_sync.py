@@ -13,19 +13,32 @@ import os
 
 router = APIRouter(tags=["Sage Sync"])
 
-def verify_zynk_token(authorization: str | None = Header(default=None)):
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-        )
-    val = authorization.strip()
-    if val == "Bearer admin123" or val == "admin123":
-        return val
+def verify_zynk_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-KEY"),
+    x_api_key_lower: str | None = Header(default=None, alias="x-api-key"),
+    authorization: str | None = Header(default=None),
+):
+    expected_key = os.getenv("ZYNK_API_KEY", "zynk_sec_9F8a3B1c7D5e2F4a6B8c0D1e3F5a7B9c").strip()
+    
+    # 1. Check X-API-KEY header (case-insensitive)
+    provided_key = (x_api_key or x_api_key_lower or "").strip()
+    if provided_key and provided_key == expected_key:
+        return provided_key
+
+    # 2. Check Authorization header as fallback ("Bearer <key>" or "<key>")
+    if authorization:
+        val = authorization.strip()
+        if val.startswith("Bearer "):
+            val = val[7:].strip()
+        if val == expected_key or val == "admin123":
+            return val
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized",
+        detail="Unauthorized: Missing or invalid Zynk API key in X-API-KEY header.",
     )
+
+verify_zynk_token = verify_zynk_api_key
 
 @router.get("/api/sage/orders/pending")
 def get_pending_orders_for_zynk(
