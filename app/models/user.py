@@ -7,6 +7,7 @@ from app.db.database import Base
 
 
 class UserRole(str, Enum):
+    ROOT_ADMIN = "root_admin"
     ADMIN = "admin"
     SALESPERSON = "salesperson"
     SHOP_OWNER = "shop_owner"
@@ -36,7 +37,7 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "role IN ('admin', 'salesperson', 'shop_owner')",
+            "role IN ('root_admin', 'admin', 'salesperson', 'shop_owner')",
             name="ck_users_role_allowed",
         ),
     )

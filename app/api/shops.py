@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import require_roles
 from app.db.database import get_db
+from app.models.order import Order, OrderItem
 from app.models.shop import SageSyncStatus, Shop, ShopApprovalStatus
 from app.models.user import User
 from app.schemas.shop import ShopApprovalUpdate, ShopCreate, ShopListResponse, ShopResponse, ShopProfileUpdate
@@ -290,3 +291,75 @@ def approve_shop_direct(
     db.commit()
     db.refresh(shop)
     return shop
+
+
+@router.delete(
+    "/admin/shops/{shop_id}",
+    summary="Delete an unsynced shop or pending approval request",
+    description="Root Admin only. Deletes a shop or pending registration request if it has not been synced to Sage 50.",
+)
+@router.delete(
+    "/shops/{shop_id}",
+    summary="Delete an unsynced shop",
+    description="Root Admin only. Deletes a shop if it has not been synced to Sage 50.",
+)
+@router.delete(
+    "/api/admin/shops/pending/{shop_id}",
+    summary="Delete a pending approval request",
+    description="Root Admin only. Deletes a pending registration request if it has not been synced to Sage 50.",
+)
+@router.delete(
+    "/admin/shops/pending/{shop_id}",
+    summary="Delete a pending approval request",
+    description="Root Admin only. Deletes a pending registration request if it has not been synced to Sage 50.",
+)
+def delete_shop(
+    shop_id: int,
+    current_user: Annotated[User, Depends(require_roles("root_admin"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    if current_user.role != "root_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+    shop = db.get(Shop, shop_id)
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Shop not found",
+        )
+
+    if shop.sage_sync_status in ("synced", SageSyncStatus.SYNCED.value, "completed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this record because it has already been synced with Sage 50.",
+        )
+
+    # Check if shop has any synced orders
+    synced_order = db.query(Order).filter(Order.shop_id == shop.id, Order.sage_sync_status == "synced").first()
+    if synced_order:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this record because it has already been synced with Sage 50.",
+        )
+
+    # Delete any unsynced orders and order items for this shop
+    shop_orders = db.query(Order).filter(Order.shop_id == shop.id).all()
+    for o in shop_orders:
+        db.query(OrderItem).filter(OrderItem.order_id == o.id).delete(synchronize_session=False)
+        db.delete(o)
+
+    user_id = shop.user_id
+    db.delete(shop)
+
+    # Clean up associated user account if role is shop_owner
+    shop_user = db.get(User, user_id)
+    if shop_user and shop_user.role == "shop_owner":
+        db.delete(shop_user)
+
+    db.commit()
+
+    return {"status": "success", "message": f"Shop {shop_id} deleted successfully"}
+

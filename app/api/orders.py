@@ -906,3 +906,45 @@ def get_order(
 
     ensure_order_access(order, current_user, db)
     return order
+
+
+@router.delete(
+    "/{order_id}",
+    summary="Delete an unsynced order",
+    description="Root Admin only. Deletes an order if it has not been synced to Sage 50.",
+)
+@admin_router.delete(
+    "/{order_id}",
+    summary="Delete an unsynced order",
+    description="Root Admin only. Deletes an order if it has not been synced to Sage 50.",
+)
+def delete_order(
+    order_id: int,
+    current_user: Annotated[User, Depends(require_roles("root_admin"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    if current_user.role != "root_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
+
+    if order.sage_sync_status in ("synced", OrderSageSyncStatus.SYNCED.value, "completed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this record because it has already been synced with Sage 50.",
+        )
+
+    db.query(OrderItem).filter(OrderItem.order_id == order.id).delete(synchronize_session=False)
+    db.delete(order)
+    db.commit()
+
+    return {"status": "success", "message": f"Order {order_id} deleted successfully"}
+

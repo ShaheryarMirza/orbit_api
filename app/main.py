@@ -69,15 +69,15 @@ def seed_root_admin():
                 name="Root Admin",
                 email="admin@admin.com",
                 password_hash=hash_password("admin123"),
-                role="admin",
+                role="root_admin",
                 is_active=True
             )
             db.add(root_admin)
             db.commit()
         else:
-            # Force role to admin and active status to ensure the admin has permissions
-            if admin_user.role != "admin" or not admin_user.is_active:
-                admin_user.role = "admin"
+            # Force role to root_admin and active status to ensure root admin has permissions
+            if admin_user.role != "root_admin" or not admin_user.is_active:
+                admin_user.role = "root_admin"
                 admin_user.is_active = True
                 db.commit()
     finally:

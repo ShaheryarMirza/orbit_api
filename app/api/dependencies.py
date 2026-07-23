@@ -41,7 +41,10 @@ def get_current_user(
 
 def require_roles(*allowed_roles: str) -> Callable[[User], User]:
     def role_dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed_roles:
+        effective_roles = set(allowed_roles)
+        if "admin" in effective_roles:
+            effective_roles.add("root_admin")
+        if current_user.role not in effective_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",
