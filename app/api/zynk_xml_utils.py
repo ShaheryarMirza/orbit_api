@@ -180,7 +180,7 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
 def generate_zynk_customer_xml(shops: List) -> str:
     """
     Takes a list of shops that need syncing and generates a Zynk-compliant
-    Customer XML payload with updated details, addresses, and telephone fields.
+    Customer XML payload with explicit AccountReference, UniqueId, and Id fields.
     """
     company = ET.Element(
         "Company",
@@ -194,6 +194,9 @@ def generate_zynk_customer_xml(shops: List) -> str:
     for shop in shops:
         customer = ET.SubElement(customers, "Customer")
         
+        id_node = ET.SubElement(customer, "Id")
+        id_node.text = str(shop.account_ref)
+
         unique_id = ET.SubElement(customer, "UniqueId")
         unique_id.text = str(shop.account_ref)
         
@@ -219,7 +222,7 @@ def generate_zynk_customer_xml(shops: List) -> str:
         inv_postcode = ET.SubElement(invoice_address, "Postcode")
         inv_postcode.text = str(shop.postcode)
         inv_country = ET.SubElement(invoice_address, "Country")
-        inv_country.text = str(shop.country)
+        inv_country.text = str(shop.country or "GB")
         inv_tel = ET.SubElement(invoice_address, "Telephone")
         inv_tel.text = str(shop.phone_number)
         if shop.telephone_2:
@@ -247,7 +250,7 @@ def generate_zynk_customer_xml(shops: List) -> str:
         del_postcode = ET.SubElement(delivery_address, "Postcode")
         del_postcode.text = str(shop.postcode)
         del_country = ET.SubElement(delivery_address, "Country")
-        del_country.text = str(shop.country)
+        del_country.text = str(shop.country or "GB")
         del_tel = ET.SubElement(delivery_address, "Telephone")
         del_tel.text = str(shop.phone_number)
         if shop.telephone_2:
@@ -269,8 +272,8 @@ def generate_zynk_customer_xml(shops: List) -> str:
 def generate_zynk_product_xml(products: List) -> str:
     """
     Takes a list of products needing Sage sync and generates an XML string
-    formatted to Zynk Sage 50 Product XML schema.
-    Maps pending_delete status to flag Sage product as Inactive (PublishStatus=Inactive).
+    formatted to official Zynk Sage 50 UK Stock Record XML schema (<StockRecords><StockRecord>).
+    Maps pending_delete or is_active=False to Sage 50 inactive status (<Inactive>true</Inactive> / <PublishStatus>Inactive</PublishStatus>).
     """
     company = ET.Element(
         "Company",
@@ -279,37 +282,56 @@ def generate_zynk_product_xml(products: List) -> str:
             "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
         }
     )
-    products_node = ET.SubElement(company, "Products")
+    stock_records = ET.SubElement(company, "StockRecords")
 
     for prod in products:
-        product_node = ET.SubElement(products_node, "Product")
+        stock_record = ET.SubElement(stock_records, "StockRecord")
         
-        id_node = ET.SubElement(product_node, "Id")
+        id_node = ET.SubElement(stock_record, "Id")
         id_node.text = str(prod.id)
 
-        sku_node = ET.SubElement(product_node, "Sku")
+        # Sage 50 UK primary stock code tag is <StockCode>
+        stock_code_node = ET.SubElement(stock_record, "StockCode")
+        stock_code_node.text = str(prod.product_code)
+
+        sku_node = ET.SubElement(stock_record, "Sku")
         sku_node.text = str(prod.product_code)
 
-        name_node = ET.SubElement(product_node, "Name")
+        name_node = ET.SubElement(stock_record, "Name")
         name_node.text = str(prod.product_name)
 
-        if prod.description:
-            desc_node = ET.SubElement(product_node, "Description")
-            desc_node.text = str(prod.description)
+        desc_node = ET.SubElement(stock_record, "Description")
+        desc_node.text = str(prod.description or prod.product_name)
 
-        unit_price_node = ET.SubElement(product_node, "UnitPrice")
-        unit_price_node.text = str(prod.price)
+        price_val = float(prod.price) if prod.price is not None else 0.0
+        price_str = f"{price_val:.2f}"
 
-        tax_rate_node = ET.SubElement(product_node, "TaxRate")
-        tax_rate_node.text = str(getattr(prod, "vat_rate", 20.0))
+        sale_price_node = ET.SubElement(stock_record, "SalePrice")
+        sale_price_node.text = price_str
 
-        publish_status_node = ET.SubElement(product_node, "PublishStatus")
-        if prod.sage_sync_status == "pending_delete" or not prod.is_active:
-            publish_status_node.text = "Inactive"
-        else:
-            publish_status_node.text = "Active"
+        unit_sell_price_node = ET.SubElement(stock_record, "UnitSellPrice")
+        unit_sell_price_node.text = price_str
 
-        sync_status_node = ET.SubElement(product_node, "SyncStatus")
+        unit_price_node = ET.SubElement(stock_record, "UnitPrice")
+        unit_price_node.text = price_str
+
+        vat_rate_val = float(getattr(prod, "vat_rate", 20.0) or 20.0)
+        tax_rate_node = ET.SubElement(stock_record, "TaxRate")
+        tax_rate_node.text = f"{vat_rate_val:.2f}"
+
+        tax_code_node = ET.SubElement(stock_record, "TaxCode")
+        tax_code_node.text = "1" if vat_rate_val > 0 else "0"
+
+        is_inactive = (prod.sage_sync_status == "pending_delete") or (getattr(prod, "is_active", True) is False)
+
+        inactive_node = ET.SubElement(stock_record, "Inactive")
+        inactive_node.text = "true" if is_inactive else "false"
+
+        publish_status_node = ET.SubElement(stock_record, "PublishStatus")
+        publish_status_node.text = "Inactive" if is_inactive else "Active"
+
+        sync_status_node = ET.SubElement(stock_record, "SyncStatus")
         sync_status_node.text = str(prod.sage_sync_status)
 
     return ET.tostring(company, encoding="utf-8").decode("utf-8")
+

@@ -246,8 +246,9 @@ async def update_sage_product_statuses(
             skus_to_update = []
             ids_to_update = []
 
-            for prod_node in root.iter("Product"):
-                sku_el = prod_node.find("Sku") or prod_node.find("ProductCode")
+            stock_nodes = list(root.iter("StockRecord")) + list(root.iter("Product"))
+            for prod_node in stock_nodes:
+                sku_el = prod_node.find("StockCode") or prod_node.find("Sku") or prod_node.find("ProductCode")
                 id_el = prod_node.find("Id")
 
                 if sku_el is not None and sku_el.text:
