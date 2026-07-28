@@ -232,14 +232,7 @@ def create_order_record(
 
 
 def ensure_order_access(order: Order, current_user: User, db: Session) -> None:
-    if current_user.role == "admin":
-        return
-    if current_user.role == "salesperson":
-        if order.salesperson_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions",
-            )
+    if current_user.role in ("admin", "root_admin", "salesperson"):
         return
 
     shop = db.query(Shop).filter(Shop.user_id == current_user.id).first()
