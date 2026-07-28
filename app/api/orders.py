@@ -1199,7 +1199,9 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
 
 
 @router.get("/{order_id}/pdf")
+@router.get("/api/orders/{order_id}/pdf")
 @admin_router.get("/{order_id}/pdf")
+@admin_router.get("/api/orders/{order_id}/pdf")
 def get_order_pdf(
     order_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
