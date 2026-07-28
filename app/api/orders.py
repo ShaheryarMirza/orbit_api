@@ -1201,7 +1201,7 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
 @router.get("/{order_id}/pdf")
 @admin_router.get("/{order_id}/pdf")
 def get_order_pdf(
-    order_id: int,
+    order_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -1211,18 +1211,40 @@ def get_order_pdf(
             detail="Access denied. PDF invoices are restricted to admin and sales personnel.",
         )
 
-    order = (
-        db.query(Order)
-        .options(joinedload(Order.shop), joinedload(Order.items))
-        .filter(Order.id == order_id)
-        .first()
-    )
+    order = None
+
+    # 1. Try querying by integer primary key first
+    if order_id.isdigit():
+        order = (
+            db.query(Order)
+            .options(joinedload(Order.shop), joinedload(Order.items))
+            .filter(Order.id == int(order_id))
+            .first()
+        )
+
+    # 2. Fallback to order_number matching (e.g. SO-000003)
+    if not order:
+        clean_id = order_id.strip()
+        order = (
+            db.query(Order)
+            .options(joinedload(Order.shop), joinedload(Order.items))
+            .filter(
+                or_(
+                    Order.order_number == clean_id,
+                    Order.order_number == f"SO-{clean_id}",
+                    Order.order_number == f"SO-{clean_id.zfill(6)}"
+                )
+            )
+            .first()
+        )
 
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found",
+            detail=f"Order '{order_id}' not found",
         )
+
+    ensure_order_access(order, current_user, db)
 
     pdf_bytes = generate_sales_order_pdf_bytes(order)
     filename = f"SalesOrder_{order.order_number or order.id}.pdf"
