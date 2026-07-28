@@ -1,4 +1,3 @@
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +30,7 @@ def normalize_email(email: str) -> str:
     response_model=MeResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def signup(payload: SignupRequest, db: Annotated[Session, Depends(get_db)]) -> User:
+def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> User:
     email = normalize_email(payload.email)
     existing_user = db.query(User).filter(User.email == email).first()
 
@@ -67,7 +66,7 @@ def signup(payload: SignupRequest, db: Annotated[Session, Depends(get_db)]) -> U
     response_model=MeResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def register(payload: RegisterRequest, db: Annotated[Session, Depends(get_db)]) -> User:
+def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
     email = normalize_email(payload.email)
     existing_user = db.query(User).filter(User.email == email).first()
 
@@ -165,7 +164,7 @@ def register(payload: RegisterRequest, db: Annotated[Session, Depends(get_db)]) 
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> TokenResponse:
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     identifier = payload.email.strip()
     
     # Lookup user by email OR shop phone_number OR shop account_ref
@@ -187,7 +186,7 @@ def login(payload: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> Tok
 
 
 @router.get("/me", response_model=MeResponse)
-def read_me(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+def read_me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
@@ -199,8 +198,8 @@ def read_me(current_user: Annotated[User, Depends(get_current_user)]) -> User:
 )
 def change_password(
     payload: ChangePasswordRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)]
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ) -> dict[str, str]:
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(
@@ -230,7 +229,7 @@ def change_password(
 )
 def create_forgot_password_request(
     payload: PasswordResetRequestCreate,
-    db: Annotated[Session, Depends(get_db)],
+    db: Session = Depends(get_db),
 ) -> PasswordResetRequest:
     # 1. Query the shop by account_ref
     ref = payload.account_ref.strip()

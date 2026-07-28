@@ -1,4 +1,3 @@
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
@@ -58,8 +57,8 @@ def validate_sage_sync_status_filter(sage_sync_status: str | None) -> str | None
 )
 def register_shop(
     payload: ShopCreate,
-    current_user: Annotated[User, Depends(require_roles("shop_owner"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("shop_owner")),
+    db: Session = Depends(get_db),
 ) -> Shop:
     existing_shop = db.query(Shop).filter(Shop.user_id == current_user.id).first()
     if existing_shop:
@@ -121,8 +120,8 @@ def register_shop(
 
 @router.get("/shops/me", response_model=ShopResponse)
 def get_my_shop(
-    current_user: Annotated[User, Depends(require_roles("shop_owner"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("shop_owner")),
+    db: Session = Depends(get_db),
 ) -> Shop:
     shop = db.query(Shop).filter(Shop.user_id == current_user.id).first()
     if not shop:
@@ -135,8 +134,8 @@ def get_my_shop(
 
 @router.get("/admin/shops", response_model=ShopListResponse)
 def get_all_shops(
-    current_user: Annotated[User, Depends(require_roles("admin", "salesperson"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
     approval_status: str | None = None,
     sage_sync_status: str | None = None,
     search: str | None = None,
@@ -186,8 +185,8 @@ def get_all_shops(
 def update_shop_approval(
     shop_id: int,
     payload: ShopApprovalUpdate,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Shop:
     if payload.approval_status == ShopApprovalStatus.PENDING:
         raise HTTPException(
@@ -218,8 +217,8 @@ def update_shop_approval(
 @router.patch("/shops/profile", response_model=ShopResponse)
 def update_shop_profile(
     payload: ShopProfileUpdate,
-    current_user: Annotated[User, Depends(require_roles("shop_owner"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("shop_owner")),
+    db: Session = Depends(get_db),
 ) -> Shop:
     shop = db.query(Shop).filter(Shop.user_id == current_user.id).first()
     if not shop:
@@ -264,8 +263,8 @@ def update_shop_profile(
 
 @router.get("/api/admin/shops/pending", response_model=list[ShopResponse])
 def get_pending_shops(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> list[Shop]:
     return (
         db.query(Shop)
@@ -277,8 +276,8 @@ def get_pending_shops(
 @router.patch("/api/admin/shops/{shop_id}/approve", response_model=ShopResponse)
 def approve_shop_direct(
     shop_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Shop:
     shop = db.get(Shop, shop_id)
     if not shop:
@@ -315,8 +314,8 @@ def approve_shop_direct(
 )
 def delete_shop(
     shop_id: int,
-    current_user: Annotated[User, Depends(require_roles("root_admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("root_admin")),
+    db: Session = Depends(get_db),
 ):
     if current_user.role != "root_admin":
         raise HTTPException(

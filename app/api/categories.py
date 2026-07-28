@@ -1,4 +1,3 @@
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.exc import IntegrityError
@@ -79,8 +78,8 @@ def get_active_subcategory_or_404(subcategory_id: int, db: Session) -> SubCatego
 )
 def create_category(
     payload: CategoryCreate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Category:
     category = Category(
         name=clean_required_text(payload.name, "Category name"),
@@ -107,8 +106,8 @@ def create_category(
     description="Available to admin, salesperson, and shop owner users.",
 )
 def list_categories(
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
 ) -> list[Category]:
     categories = (
         db.query(Category)
@@ -130,8 +129,8 @@ def list_categories(
 )
 def get_category(
     category_id: int,
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
 ) -> Category:
     return get_active_category_or_404(category_id, db)
 
@@ -145,8 +144,8 @@ def get_category(
 def put_category(
     category_id: int,
     payload: CategoryUpdate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Category:
     category = get_active_category_or_404(category_id, db)
 
@@ -180,8 +179,8 @@ def put_category(
 def update_category(
     category_id: int,
     payload: CategoryUpdate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Category:
     category = get_active_category_or_404(category_id, db)
 
@@ -214,8 +213,8 @@ def update_category(
 )
 def delete_category(
     category_id: int,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Category:
     category = get_active_category_or_404(category_id, db)
     category.is_active = False
@@ -233,8 +232,8 @@ def delete_category(
 )
 def create_subcategory(
     payload: SubCategoryCreate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     get_active_category_or_404(payload.category_id, db)
     subcategory = SubCategory(
@@ -263,8 +262,8 @@ def create_subcategory(
     description="Available to admin, salesperson, and shop owner users.",
 )
 def list_subcategories(
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
 ) -> list[SubCategory]:
     return (
         db.query(SubCategory)
@@ -282,8 +281,8 @@ def list_subcategories(
 )
 def get_subcategory(
     subcategory_id: int,
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     return get_active_subcategory_or_404(subcategory_id, db)
 
@@ -297,8 +296,8 @@ def get_subcategory(
 def put_subcategory(
     subcategory_id: int,
     payload: SubCategoryUpdate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     subcategory = get_active_subcategory_or_404(subcategory_id, db)
 
@@ -335,8 +334,8 @@ def put_subcategory(
 def update_subcategory(
     subcategory_id: int,
     payload: SubCategoryUpdate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     subcategory = get_active_subcategory_or_404(subcategory_id, db)
 
@@ -372,8 +371,8 @@ def update_subcategory(
 )
 def delete_subcategory(
     subcategory_id: int,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     subcategory = get_active_subcategory_or_404(subcategory_id, db)
     subcategory.is_active = False
@@ -390,9 +389,9 @@ def delete_subcategory(
 )
 def upload_category_image(
     category_id: int,
-    file: Annotated[UploadFile, File(description="Category image file")],
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(description="Category image file"),
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Category:
     category = get_active_category_or_404(category_id, db)
     file_url = save_upload_file(file, "categories")
@@ -410,9 +409,9 @@ def upload_category_image(
 )
 def upload_subcategory_image(
     subcategory_id: int,
-    file: Annotated[UploadFile, File(description="Subcategory image file")],
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(description="Subcategory image file"),
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> SubCategory:
     subcategory = get_active_subcategory_or_404(subcategory_id, db)
     file_url = save_upload_file(file, "subcategories")

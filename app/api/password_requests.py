@@ -1,4 +1,3 @@
-from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -19,8 +18,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin-password-requests"])
     summary="Get all pending password reset requests",
 )
 def get_pending_password_requests(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> list[PasswordResetRequest]:
     return (
         db.query(PasswordResetRequest)
@@ -38,8 +37,8 @@ def get_pending_password_requests(
 def resolve_password_request(
     request_id: int,
     payload: PasswordResetResolveRequest,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> PasswordResetRequest:
     req = db.get(PasswordResetRequest, request_id)
     if not req:

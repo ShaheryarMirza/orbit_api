@@ -1,4 +1,3 @@
-from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -20,8 +19,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin-users"])
 )
 def create_admin(
     payload: AdminCreate,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> User:
     existing_user = db.query(User).filter(User.email == payload.email.strip().lower()).first()
     if existing_user:
@@ -52,8 +51,8 @@ def create_admin(
 )
 def create_salesperson(
     payload: SalespersonCreate,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> User:
     existing_user = db.query(User).filter(User.email == payload.email.strip().lower()).first()
     if existing_user:
@@ -82,8 +81,8 @@ def create_salesperson(
     description="Only administrators can retrieve the list of salesperson accounts."
 )
 def list_salespersons(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> list[User]:
     return db.query(User).filter(User.role == "salesperson").all()
 
@@ -95,8 +94,8 @@ def list_salespersons(
     description="Only administrators can retrieve the list of admin accounts."
 )
 def list_admins(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> list[User]:
     return db.query(User).filter(User.role == "admin").all()
 
@@ -107,8 +106,8 @@ def list_admins(
     description="Only administrators can retrieve the list of pending shop accounts."
 )
 def list_pending_shops(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ):
     from app.models.shop import Shop
     results = db.query(Shop, User).join(User, Shop.user_id == User.id).filter(Shop.is_approved == False).all()
@@ -132,8 +131,8 @@ def list_pending_shops(
 )
 def approve_shop(
     shop_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ):
     from app.models.shop import Shop, ShopApprovalStatus
     shop = db.query(Shop).filter(Shop.id == shop_id).first()
@@ -158,8 +157,8 @@ def approve_shop(
 def update_salesperson(
     user_id: int,
     payload: SalespersonUpdate,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> User:
     user = db.get(User, user_id)
     if not user or user.role != "salesperson":
@@ -195,8 +194,8 @@ def update_salesperson(
 )
 def delete_salesperson(
     user_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> User:
     user = db.get(User, user_id)
     if not user or user.role != "salesperson":

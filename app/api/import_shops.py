@@ -1,5 +1,4 @@
 import io
-from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 import pandas as pd
@@ -27,7 +26,7 @@ def find_column(df: pd.DataFrame, possible_names: list[str]) -> str | None:
     description="Allows administrators to upload a customer spreadsheet to batch create shop owners and shops."
 )
 def import_shops(
-    current_user: Annotated[User, Depends(require_roles("admin"))],
+    current_user: User = Depends(require_roles("admin")),
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
 ):

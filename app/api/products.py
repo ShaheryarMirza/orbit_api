@@ -1,7 +1,7 @@
 import csv
 from decimal import Decimal, InvalidOperation
 from io import StringIO
-from typing import Annotated
+import pandas as pd
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import or_
@@ -78,8 +78,8 @@ def get_active_product_or_404(product_id: int, db: Session) -> Product:
 )
 def create_product(
     payload: ProductCreate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Product:
     if payload.category_id is not None:
         category = db.query(Category).filter(Category.id == payload.category_id, Category.is_active.is_(True)).first()
@@ -118,8 +118,8 @@ def create_product(
     description="Available to admin, salesperson, and shop owner users.",
 )
 def list_products(
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
     search: str | None = None,
     category_id: int | None = None,
     subcategory_id: int | None = None,
@@ -179,8 +179,8 @@ def list_products(
     ),
 )
 def list_low_stock_products(
-    current_user: Annotated[User, Depends(inventory_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(inventory_roles),
+    db: Session = Depends(get_db),
     threshold: int = Query(default=10, ge=0),
 ) -> list[Product]:
     return (
@@ -204,9 +204,9 @@ def list_low_stock_products(
     ),
 )
 async def import_products_csv(
-    file: Annotated[UploadFile, File(description="CSV file containing products")],
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(description="CSV file containing products"),
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> ProductCsvImportResponse:
     filename = file.filename or ""
     allowed_content_types = {
@@ -337,8 +337,8 @@ async def import_products_csv(
     ),
 )
 def export_products_csv(
-    current_user: Annotated[User, Depends(inventory_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(inventory_roles),
+    db: Session = Depends(get_db),
     search: str | None = None,
     category_id: int | None = None,
     subcategory_id: int | None = None,
@@ -416,8 +416,8 @@ def export_products_csv(
 )
 def get_product(
     product_id: int,
-    current_user: Annotated[User, Depends(read_roles)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(read_roles),
+    db: Session = Depends(get_db),
 ) -> Product:
     return get_active_product_or_404(product_id, db)
 
@@ -431,8 +431,8 @@ def get_product(
 def update_product(
     product_id: int,
     payload: ProductUpdate,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Product:
     product = get_active_product_or_404(product_id, db)
 
@@ -485,8 +485,8 @@ def update_product(
 )
 def delete_product(
     product_id: int,
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Product:
     product = get_active_product_or_404(product_id, db)
     product.is_active = False
@@ -504,9 +504,9 @@ def delete_product(
 )
 def upload_product_image(
     product_id: int,
-    file: Annotated[UploadFile, File(description="Product image file")],
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(description="Product image file"),
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> Product:
     product = get_active_product_or_404(product_id, db)
     file_url = save_upload_file(file, "products")
@@ -530,9 +530,9 @@ def find_column(df: pd.DataFrame, possible_names: list[str]) -> str | None:
     description="Admin-only endpoint for importing products from Excel or CSV.",
 )
 async def import_products(
-    file: Annotated[UploadFile, File(description="Excel or CSV file containing products")],
-    current_user: Annotated[User, Depends(admin_role)],
-    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(description="Excel or CSV file containing products"),
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
 ) -> ProductCsvImportResponse:
     import io
     import re

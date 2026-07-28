@@ -379,8 +379,8 @@ def apply_order_list_filters(
     description="Admin-only dashboard summary for orders, with optional date filtering.",
 )
 def get_admin_order_summary(
-    current_user: Annotated[User, Depends(require_roles("admin", "salesperson"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> OrderSummaryResponse:
@@ -420,8 +420,8 @@ def get_admin_order_summary(
 )
 def create_shop_owner_order(
     payload: OrderCreate,
-    current_user: Annotated[User, Depends(require_roles("shop_owner"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("shop_owner")),
+    db: Session = Depends(get_db),
 ) -> Order:
     shop = get_current_user_approved_shop(current_user, db)
     return create_order_record(
@@ -442,8 +442,8 @@ def create_shop_owner_order(
 )
 def create_assisted_order(
     payload: AssistedOrderCreate,
-    current_user: Annotated[User, Depends(require_roles("admin", "salesperson"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
 ) -> Order:
     shop = get_approved_shop_or_404(payload.shop_id, db)
     return create_order_record(
@@ -466,8 +466,8 @@ def create_assisted_order(
 )
 def mark_order_sage_processing(
     order_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -500,8 +500,8 @@ def mark_order_sage_processing(
 )
 def mark_order_sage_failed(
     order_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -528,8 +528,8 @@ def mark_order_sage_failed(
 def mark_order_sage_synced(
     order_id: int,
     payload: SageSyncedRequest,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -561,8 +561,8 @@ def mark_order_sage_synced(
 )
 def retry_order_sage_sync(
     order_id: int,
-    current_user: Annotated[User, Depends(require_roles("admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
 ) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -599,8 +599,8 @@ def retry_order_sage_sync(
 )
 def cancel_order(
     order_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> Order:
     try:
         order = (
@@ -661,8 +661,8 @@ def cancel_order(
     description="Admin and salesperson see all orders. Shop owners see only their own shop orders.",
 )
 def list_orders(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
     search: str | None = None,
     status: str | None = None,
     sage_sync_status: str | None = None,
@@ -726,11 +726,8 @@ def list_orders(
     ),
 )
 def list_sage_pending_orders(
-    current_user: Annotated[
-        User,
-        Depends(require_roles("admin", "salesperson")),
-    ],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
 ) -> list[SalesOrderDetailResponse]:
     orders = (
         db.query(Order)
@@ -754,11 +751,8 @@ def list_sage_pending_orders(
     description="Admin and salesperson can export matching orders with one row per order item.",
 )
 def export_orders_csv(
-    current_user: Annotated[
-        User,
-        Depends(require_roles("admin", "salesperson")),
-    ],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
     search: str | None = None,
     status: str | None = None,
     date_from: date | None = None,
@@ -856,8 +850,8 @@ def export_orders_csv(
 )
 def get_sales_order_detail(
     order_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> SalesOrderDetailResponse:
     order = (
         db.query(Order)
@@ -886,8 +880,8 @@ def get_sales_order_detail(
 )
 def get_order(
     order_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -912,8 +906,8 @@ def get_order(
 )
 def delete_order(
     order_id: int,
-    current_user: Annotated[User, Depends(require_roles("root_admin"))],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(require_roles("root_admin")),
+    db: Session = Depends(get_db),
 ):
     if current_user.role != "root_admin":
         raise HTTPException(
@@ -1204,8 +1198,8 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
 @admin_router.get("/api/orders/{order_id}/pdf")
 def get_order_pdf(
     order_id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if current_user.role not in ["root_admin", "admin", "salesperson"]:
         raise HTTPException(
