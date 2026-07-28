@@ -9,11 +9,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-
 from app.api.dependencies import get_current_user, require_roles
 from app.db.database import get_db
 from app.models.order import (
@@ -950,6 +945,11 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
     """
     Generates a professional A4 PDF invoice for a Sales Order using ReportLab.
     """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -1248,7 +1248,19 @@ def get_order_pdf(
 
     ensure_order_access(order, current_user, db)
 
-    pdf_bytes = generate_sales_order_pdf_bytes(order)
+    try:
+        pdf_bytes = generate_sales_order_pdf_bytes(order)
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="PDF generation library 'reportlab' is missing on the server. Please run pip install reportlab",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF invoice: {str(e)}",
+        )
+
     filename = f"SalesOrder_{order.order_number or order.id}.pdf"
 
     return Response(
