@@ -175,20 +175,66 @@ def get_pending_customers_for_zynk(
 
 
 @router.post("/api/sage/customers/success")
-def update_sage_customer_statuses(
-    payload: CustomersSyncSuccessRequest,
+async def update_sage_customer_statuses(
+    request: Request,
     db: Session = Depends(get_db),
     token: str = Depends(verify_zynk_token)
 ):
-    if not payload.account_refs:
-        return {"status": "success", "message": "No account references supplied"}
+    body = await request.body()
+    account_refs = []
 
-    # Update needs_sage_sync to False for the specified shops
-    db.query(Shop).filter(Shop.account_ref.in_(payload.account_refs)).update(
+    if body:
+        # 1. Try parsing JSON body first
+        try:
+            import json
+            data = json.loads(body)
+            if isinstance(data, dict):
+                refs = data.get("account_refs") or data.get("account_ref") or data.get("account_references") or []
+                if isinstance(refs, str):
+                    account_refs.append(refs)
+                elif isinstance(refs, list):
+                    account_refs.extend([str(r) for r in refs if r])
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, str):
+                        account_refs.append(item)
+                    elif isinstance(item, dict):
+                        ref = item.get("account_ref") or item.get("AccountReference") or item.get("AccountRef")
+                        if ref:
+                            account_refs.append(str(ref))
+        except Exception:
+            pass
+
+        # 2. Fallback: try parsing XML body
+        if not account_refs:
+            try:
+                root = ET.fromstring(body)
+                for tag in ["AccountReference", "UniqueId", "Id", "AccountRef"]:
+                    for el in root.iter(tag):
+                        if el.text and el.text.strip():
+                            val = el.text.strip()
+                            if val not in account_refs:
+                                account_refs.append(val)
+            except Exception:
+                pass
+
+    if account_refs:
+        db.query(Shop).filter(Shop.account_ref.in_(account_refs)).update(
+            {Shop.needs_sage_sync: False}, synchronize_session=False
+        )
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Customer sync statuses updated for {len(account_refs)} account(s)",
+            "account_refs": account_refs
+        }
+
+    # Fallback: if no specific account references were found in payload, mark all currently pending shops as synced
+    db.query(Shop).filter(Shop.needs_sage_sync == True).update(
         {Shop.needs_sage_sync: False}, synchronize_session=False
     )
     db.commit()
-    return {"status": "success", "message": "Customer sync statuses acknowledged and updated"}
+    return {"status": "success", "message": "Customer sync acknowledged"}
 
 
 class ProductsSyncSuccessRequest(BaseModel):
