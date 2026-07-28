@@ -2,13 +2,17 @@ import csv
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
-from io import StringIO
-from typing import Annotated
+from io import StringIO, BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
 from app.api.dependencies import get_current_user, require_roles
 from app.db.database import get_db
@@ -947,4 +951,296 @@ def delete_order(
     db.commit()
 
     return {"status": "success", "message": f"Order {order_id} deleted successfully"}
+
+
+def generate_sales_order_pdf_bytes(order: Order) -> bytes:
+    """
+    Generates a professional A4 PDF invoice for a Sales Order using ReportLab.
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+
+    story = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor('#0F172A'),
+        alignment=2
+    )
+
+    company_title = ParagraphStyle(
+        'CompanyTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#0D9488')
+    )
+
+    normal_text = ParagraphStyle(
+        'NormalText',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#334155')
+    )
+
+    bold_text = ParagraphStyle(
+        'BoldText',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#0F172A')
+    )
+
+    header_cell = ParagraphStyle(
+        'HeaderCell',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=11,
+        textColor=colors.white
+    )
+
+    # 1. Header Block
+    left_header = [
+        Paragraph("<b>ORBIT FOOD LIMITED</b>", company_title),
+        Paragraph("B2B Wholesale Ordering & Distribution", normal_text),
+        Paragraph("Unit 10, Industrial Trading Estate, London, UK", normal_text),
+        Paragraph("Tel: +44 (0) 20 8123 4567 | Email: orders@orbitfood.net", normal_text),
+        Paragraph("Web: www.orbitfood.net", normal_text),
+    ]
+
+    order_num = order.order_number or f"SO-PEND-{order.id}"
+    created_str = order.created_at.strftime("%d/%m/%Y %H:%M") if order.created_at else datetime.now().strftime("%d/%m/%Y %H:%M")
+    created_by_role = getattr(order, "created_by_role", "customer") or "customer"
+    salesperson_name = "Direct Customer Purchase"
+    if created_by_role == "salesperson":
+        salesperson_name = "Salesperson Assisted"
+
+    sage_ref = order.sage_order_number or "Not Synced"
+    sync_status = (order.sage_sync_status or "pending").capitalize()
+
+    right_header = [
+        Paragraph("SALES ORDER", title_style),
+        Spacer(1, 4),
+        Paragraph(f"<b>Order No:</b> {order_num}", ParagraphStyle('RightText', parent=bold_text, alignment=2)),
+        Paragraph(f"<b>Date:</b> {created_str}", ParagraphStyle('RightText', parent=normal_text, alignment=2)),
+        Paragraph(f"<b>Created By:</b> {salesperson_name}", ParagraphStyle('RightText', parent=normal_text, alignment=2)),
+        Paragraph(f"<b>Sage Ref:</b> {sage_ref} ({sync_status})", ParagraphStyle('RightText', parent=normal_text, alignment=2)),
+    ]
+
+    header_table = Table([[left_header, right_header]], colWidths=[300, 222])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+
+    story.append(header_table)
+    story.append(Spacer(1, 15))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#E2E8F0'), spaceBefore=0, spaceAfter=15))
+
+    # 2. Customer & Address Block
+    shop = order.shop
+    company_name = shop.company_name if shop else "N/A"
+    contact_name = (shop.contact_name if shop else "") or "N/A"
+    account_ref = (order.account_ref or (shop.account_ref if shop else "")) or "N/A"
+    phone = (shop.phone_number if shop else "") or "N/A"
+    email = (shop.user.email if shop and shop.user else "") or "N/A"
+    address = (f"{shop.address}, {shop.city}, {shop.postcode}" if shop else "N/A")
+
+    cust_box = [
+        Paragraph("<b>CUSTOMER DETAILS</b>", bold_text),
+        Spacer(1, 4),
+        Paragraph(f"<b>Company:</b> {company_name}", normal_text),
+        Paragraph(f"<b>Account Ref:</b> {account_ref}", normal_text),
+        Paragraph(f"<b>Contact:</b> {contact_name}", normal_text),
+        Paragraph(f"<b>Phone:</b> {phone}", normal_text),
+        Paragraph(f"<b>Email:</b> {email}", normal_text),
+    ]
+
+    address_box = [
+        Paragraph("<b>BILLING & DELIVERY ADDRESS</b>", bold_text),
+        Spacer(1, 4),
+        Paragraph(f"<b>Address:</b> {address}", normal_text),
+        Paragraph(f"<b>Country:</b> {getattr(shop, 'country', 'United Kingdom')}", normal_text),
+        Paragraph(f"<b>Payment Terms:</b> B2B Trade Account", normal_text),
+    ]
+
+    info_table = Table([[cust_box, address_box]], colWidths=[260, 262])
+    info_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('LEFTPADDING', (0,0), (-1,-1), 8),
+        ('RIGHTPADDING', (0,0), (-1,-1), 8),
+    ]))
+
+    story.append(info_table)
+    story.append(Spacer(1, 15))
+
+    # 3. Line Items Table
+    table_data = [
+        [
+            Paragraph("<b>#</b>", header_cell),
+            Paragraph("<b>SKU</b>", header_cell),
+            Paragraph("<b>Product Name</b>", header_cell),
+            Paragraph("<b>Qty</b>", header_cell),
+            Paragraph("<b>Unit Price (ex. VAT)</b>", header_cell),
+            Paragraph("<b>VAT %</b>", header_cell),
+            Paragraph("<b>Total (ex. VAT)</b>", header_cell),
+            Paragraph("<b>Total (inc. VAT)</b>", header_cell),
+        ]
+    ]
+
+    cell_style = ParagraphStyle('Cell', parent=normal_text, fontSize=8, leading=10)
+    cell_bold = ParagraphStyle('CellBold', parent=bold_text, fontSize=8, leading=10)
+
+    subtotal_ex_vat = 0.0
+    total_vat = 0.0
+
+    for idx, item in enumerate(order.items, start=1):
+        p_code = item.product_code or "-"
+        p_name = item.product_name or "-"
+        qty = item.quantity
+        price = float(item.unit_price)
+        vat_rate = float(getattr(item, "vat_rate", 20.0) or 20.0)
+
+        line_ex = price * qty
+        line_vat = line_ex * (vat_rate / 100.0)
+        line_inc = line_ex + line_vat
+
+        subtotal_ex_vat += line_ex
+        total_vat += line_vat
+
+        table_data.append([
+            Paragraph(str(idx), cell_style),
+            Paragraph(p_code, cell_style),
+            Paragraph(p_name, cell_style),
+            Paragraph(str(qty), cell_style),
+            Paragraph(f"£{price:.2f}", cell_style),
+            Paragraph(f"{vat_rate:.0f}%", cell_style),
+            Paragraph(f"£{line_ex:.2f}", cell_style),
+            Paragraph(f"£{line_inc:.2f}", cell_bold),
+        ])
+
+    grand_total = subtotal_ex_vat + total_vat
+
+    items_table = Table(table_data, colWidths=[20, 75, 165, 30, 65, 42, 60, 65])
+
+    t_style = [
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0D9488')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('LEFTPADDING', (0,0), (-1,-1), 4),
+        ('RIGHTPADDING', (0,0), (-1,-1), 4),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+    ]
+
+    for r in range(1, len(table_data)):
+        if r % 2 == 0:
+            t_style.append(('BACKGROUND', (0, r), (-1, r), colors.HexColor('#F8FAFC')))
+
+    items_table.setStyle(TableStyle(t_style))
+    story.append(items_table)
+    story.append(Spacer(1, 15))
+
+    # 4. Totals Box
+    totals_data = [
+        [Paragraph("<b>Subtotal (Excl. VAT):</b>", normal_text), Paragraph(f"£{subtotal_ex_vat:.2f}", bold_text)],
+        [Paragraph("<b>Total VAT:</b>", normal_text), Paragraph(f"£{total_vat:.2f}", bold_text)],
+        [Paragraph("<b>Grand Total (Incl. VAT):</b>", ParagraphStyle('GrandTitle', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488'))),
+         Paragraph(f"<b>£{grand_total:.2f}</b>", ParagraphStyle('GrandVal', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488')))]
+    ]
+
+    totals_table = Table(totals_data, colWidths=[140, 90])
+    totals_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LINEBELOW', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
+        ('LINEBELOW', (0,-1), (-1,-1), 1.5, colors.HexColor('#0D9488')),
+    ]))
+
+    summary_wrapper = Table([["", totals_table]], colWidths=[292, 230])
+    summary_wrapper.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+    ]))
+
+    story.append(summary_wrapper)
+    story.append(Spacer(1, 30))
+
+    footer_text = Paragraph(
+        "<font color='#64748B'>Thank you for your business with Orbit Food Limited. For any order inquiries, please contact our support team at orders@orbitfood.net.</font>",
+        ParagraphStyle('Footer', parent=normal_text, alignment=1, fontSize=8)
+    )
+    story.append(footer_text)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+@router.get("/{order_id}/pdf")
+@admin_router.get("/{order_id}/pdf")
+def get_order_pdf(
+    order_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    if current_user.role not in ["root_admin", "admin", "salesperson"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. PDF invoices are restricted to admin and sales personnel.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.shop), joinedload(Order.items))
+        .filter(Order.id == order_id)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
+
+    pdf_bytes = generate_sales_order_pdf_bytes(order)
+    filename = f"SalesOrder_{order.order_number or order.id}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
 
