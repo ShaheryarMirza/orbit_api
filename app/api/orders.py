@@ -1003,14 +1003,15 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
         textColor=colors.white
     )
 
-    # 1. Header Block
-    left_header = [
-        Paragraph("<b>ORBIT FOOD LIMITED</b>", company_title),
-        Paragraph("B2B Wholesale Ordering & Distribution", normal_text),
-        Paragraph("Unit 10, Industrial Trading Estate, London, UK", normal_text),
-        Paragraph("Tel: +44 (0) 20 8123 4567 | Email: orders@orbitfood.net", normal_text),
-        Paragraph("Web: www.orbitfood.net", normal_text),
-    ]
+    # 1. Header Block: Left Header uses Official Logo
+    import os
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logo_path = os.path.join(base_dir, "assets", "logo.png")
+
+    if os.path.exists(logo_path):
+        left_header = [RLImage(logo_path, width=95, height=90)]
+    else:
+        left_header = [Paragraph("<b>ORBIT FOOD LIMITED</b>", company_title)]
 
     order_num = order.order_number or f"SO-PEND-{order.id}"
     created_str = order.created_at.strftime("%d/%m/%Y %H:%M") if order.created_at else datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1031,9 +1032,9 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
         Paragraph(f"<b>Sage Ref:</b> {sage_ref} ({sync_status})", ParagraphStyle('RightText', parent=normal_text, alignment=2)),
     ]
 
-    header_table = Table([[left_header, right_header]], colWidths=[300, 222])
+    header_table = Table([[left_header, right_header]], colWidths=[200, 322])
     header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
         ('RIGHTPADDING', (0,0), (-1,-1), 0),
         ('BOTTOMPADDING', (0,0), (-1,-1), 0),
@@ -1179,13 +1180,6 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
     ]))
 
     story.append(summary_wrapper)
-    story.append(Spacer(1, 30))
-
-    footer_text = Paragraph(
-        "<font color='#64748B'>Thank you for your business with Orbit Food Limited. For any order inquiries, please contact our support team at orders@orbitfood.net.</font>",
-        ParagraphStyle('Footer', parent=normal_text, alignment=1, fontSize=8)
-    )
-    story.append(footer_text)
 
     doc.build(story)
     buffer.seek(0)
