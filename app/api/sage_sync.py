@@ -251,6 +251,7 @@ def get_pending_products_for_zynk(
     products = (
         db.query(Product)
         .filter(Product.sage_sync_status != "synced")
+        .order_by(Product.product_code.asc())
         .all()
     )
     xml_data = generate_zynk_product_xml(products)

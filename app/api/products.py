@@ -154,7 +154,7 @@ def list_products(
     total = query.count()
     pages = (total + page_size - 1) // page_size if total else 0
     items = (
-        query.order_by(Product.product_name.asc())
+        query.order_by(Product.product_code.asc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -382,7 +382,7 @@ def export_products_csv(
     )
 
     for product, subcategory, category in query.order_by(
-        Product.product_name.asc()
+        Product.product_code.asc()
     ).all():
         writer.writerow(
             [
