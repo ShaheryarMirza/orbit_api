@@ -155,6 +155,29 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 fax_del = ET.SubElement(sales_order_del_address, "Fax")
                 fax_del.text = order.shop.fax
 
+        # 5b. Order-Level Discounts (Zynk Net Value Discount)
+        disc_amount = float(getattr(order, "discount_amount", 0) or 0)
+        disc_type = getattr(order, "discount_type", None)
+        disc_val = float(getattr(order, "discount_value", 0) or 0)
+
+        if disc_amount > 0 or disc_val > 0:
+            disc_desc = ET.SubElement(sales_order, "NetValueDiscountDescription")
+            disc_desc.text = "Order Discount"
+
+            disc_comment = ET.SubElement(sales_order, "NetValueDiscountComment1")
+            if disc_type == "percentage":
+                disc_comment.text = f"Percentage Discount ({disc_val:g}%)"
+            else:
+                disc_comment.text = f"Fixed Discount (£{disc_amount:.2f})"
+
+            if disc_type == "percentage" and disc_val > 0:
+                disc_pct = ET.SubElement(sales_order, "NetValueDiscountPercent")
+                disc_pct.text = f"{disc_val:.2f}"
+
+            if disc_amount > 0:
+                disc_net = ET.SubElement(sales_order, "NetValueDiscount")
+                disc_net.text = f"{disc_amount:.2f}"
+
         # 6. Items mapping
         sales_order_items = ET.SubElement(sales_order, "SalesOrderItems")
         
@@ -163,12 +186,36 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             
             sku = ET.SubElement(item_node, "Sku")
             sku.text = str(item.product_code)
+
+            if getattr(item, "product_name", None):
+                name = ET.SubElement(item_node, "Name")
+                name.text = str(item.product_name)
             
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
             
             unit_price = ET.SubElement(item_node, "UnitPrice")
             unit_price.text = str(item.unit_price)
+
+            # Item-Level Unit Discounts
+            if disc_type == "percentage" and disc_val > 0:
+                unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
+                unit_disc_pct.text = f"{disc_val:.2f}"
+                
+                price_val = float(item.unit_price)
+                unit_disc_amt_val = round(price_val * (disc_val / 100.0), 2)
+                unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
+                unit_disc_amt.text = f"{unit_disc_amt_val:.2f}"
+            elif disc_amount > 0 and float(getattr(order, "subtotal", 0) or 0) > 0:
+                sub_val = float(order.subtotal)
+                effective_pct = (disc_amount / sub_val) * 100.0
+                unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
+                unit_disc_pct.text = f"{effective_pct:.2f}"
+
+                price_val = float(item.unit_price)
+                unit_disc_amt_val = round(price_val * (effective_pct / 100.0), 2)
+                unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
+                unit_disc_amt.text = f"{unit_disc_amt_val:.2f}"
 
             tax_rate = ET.SubElement(item_node, "TaxRate")
             tax_rate.text = str(getattr(item, "vat_rate", 20.0))
