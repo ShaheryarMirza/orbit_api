@@ -30,6 +30,7 @@ from app.schemas.order import (
     OrderSummaryResponse,
     SageSyncedRequest,
     SalesOrderDetailResponse,
+    UpdateOrderPricesRequest,
 )
 
 
@@ -88,9 +89,13 @@ def build_order_items(
     order_items: list[OrderItem] = []
 
     product_vats = {}
+    product_prices = {}
     for item in items:
-        if is_assisted and item.vat_rate is not None:
-            product_vats[item.product_id] = item.vat_rate
+        if is_assisted:
+            if item.vat_rate is not None:
+                product_vats[item.product_id] = item.vat_rate
+            if item.unit_price is not None:
+                product_prices[item.product_id] = quantize_money(item.unit_price)
 
     for product_id, quantity in aggregate_items(items).items():
         product = (
@@ -105,7 +110,9 @@ def build_order_items(
                 detail=f"Product {product_id} not found",
             )
 
-        unit_price = quantize_money(product.price)
+        unit_price = product_prices.get(product.id)
+        if unit_price is None:
+            unit_price = quantize_money(product.price)
         line_total = quantize_money(unit_price * quantity)
         subtotal += line_total
 
@@ -394,11 +401,13 @@ def get_admin_order_summary(
     cancelled_orders = query.filter(Order.status == OrderStatus.CANCELLED.value).count()
     pending_sage_sync = query.filter(Order.sage_sync_status == "pending").count()
 
-    subtotal_total = query.with_entities(func.coalesce(func.sum(Order.subtotal), 0)).scalar()
-    discount_total = query.with_entities(
+    active_query = query.filter(Order.status == OrderStatus.PLACED.value)
+
+    subtotal_total = active_query.with_entities(func.coalesce(func.sum(Order.subtotal), 0)).scalar()
+    discount_total = active_query.with_entities(
         func.coalesce(func.sum(Order.discount_amount), 0)
     ).scalar()
-    final_total = query.with_entities(func.coalesce(func.sum(Order.final_total), 0)).scalar()
+    final_total = active_query.with_entities(func.coalesce(func.sum(Order.final_total), 0)).scalar()
 
     return OrderSummaryResponse(
         total_orders=total_orders,
@@ -646,6 +655,94 @@ def cancel_order(
         db.commit()
         db.refresh(order)
         return order
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.patch(
+    "/{order_id}/prices",
+    response_model=SalesOrderDetailResponse,
+    summary="Update order line item prices (Admin & Salesperson)",
+    description=(
+        "Allows staff to update line item unit prices of an existing placed, unsynced order. "
+        "Recalculates line totals, subtotal, discount, VAT, and final total in database."
+    ),
+)
+def update_order_prices(
+    order_id: int,
+    payload: UpdateOrderPricesRequest,
+    current_user: User = Depends(require_roles("admin", "salesperson")),
+    db: Session = Depends(get_db),
+) -> SalesOrderDetailResponse:
+    try:
+        order = (
+            db.query(Order)
+            .options(joinedload(Order.shop), joinedload(Order.items))
+            .filter(Order.id == order_id)
+            .with_for_update()
+            .first()
+        )
+        if not order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found",
+            )
+
+        ensure_order_access(order, current_user, db)
+
+        if order.status != OrderStatus.PLACED.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only placed orders can have their prices updated",
+            )
+
+        if order.sage_sync_status in ("synced", OrderSageSyncStatus.SYNCED.value, "completed"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot update prices for an order that has already been synced with Sage",
+            )
+
+        price_map = {item_update.product_id: item_update for item_update in payload.items}
+
+        subtotal = Decimal("0.00")
+        for item in order.items:
+            if item.product_id in price_map:
+                item_update = price_map[item.product_id]
+                item.unit_price = quantize_money(item_update.unit_price)
+                if item_update.vat_rate is not None:
+                    item.vat_rate = item_update.vat_rate
+
+            item.line_total = quantize_money(item.unit_price * item.quantity)
+            item.vat_amount = float(item.line_total) * (item.vat_rate / 100.0)
+            subtotal += item.line_total
+
+        order.subtotal = quantize_money(subtotal)
+
+        disc_type_enum = None
+        if order.discount_type:
+            try:
+                disc_type_enum = DiscountType(order.discount_type)
+            except ValueError:
+                pass
+
+        stored_discount_type, stored_discount_value, discount_amount = calculate_discount(
+            order.subtotal,
+            disc_type_enum,
+            order.discount_value,
+        )
+
+        order.discount_amount = discount_amount
+        order.final_total = quantize_money(order.subtotal - discount_amount)
+        order.total_vat = sum(item.vat_amount for item in order.items)
+
+        db.commit()
+        db.refresh(order)
+
+        return build_sales_order_detail_response(order)
     except HTTPException:
         db.rollback()
         raise

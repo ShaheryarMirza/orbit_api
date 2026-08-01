@@ -10,6 +10,7 @@ class OrderItemCreate(BaseModel):
     product_id: int
     quantity: int = Field(gt=0)
     vat_rate: float | None = Field(default=None, ge=0.0)
+    unit_price: Decimal | None = Field(default=None, ge=0.0)
 
 
 class OrderCreate(BaseModel):
@@ -24,6 +25,16 @@ class AssistedOrderCreate(BaseModel):
     discount_value: Decimal | None = Field(default=None, ge=0)
     customer_reference: str | None = Field(default=None, max_length=255)
     internal_notes: str | None = Field(default=None, max_length=1000)
+
+
+class OrderPriceItemUpdate(BaseModel):
+    product_id: int
+    unit_price: Decimal = Field(ge=0.0)
+    vat_rate: float | None = Field(default=None, ge=0.0)
+
+
+class UpdateOrderPricesRequest(BaseModel):
+    items: list[OrderPriceItemUpdate] = Field(min_length=1)
 
 
 class SageSyncedRequest(BaseModel):
