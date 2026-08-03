@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies import require_roles
 from app.db.database import get_db
 from app.models.category import Category, SubCategory
+from app.models.order import OrderItem
 from app.models.product import Product
 from app.models.user import User
 from app.utils.file_storage import save_upload_file
@@ -451,6 +452,16 @@ def update_product(
         product.product_code = clean_required_text(payload.product_code, "Product code")
     if payload.product_name is not None:
         product.product_name = clean_required_text(payload.product_name, "Product name")
+
+    if payload.product_code is not None or payload.product_name is not None:
+        db.query(OrderItem).filter(OrderItem.product_id == product.id).update(
+            {
+                OrderItem.product_code: product.product_code,
+                OrderItem.product_name: product.product_name,
+            },
+            synchronize_session=False,
+        )
+
     if "description" in payload.model_fields_set:
         product.description = payload.description.strip() if payload.description else None
     if payload.price is not None:

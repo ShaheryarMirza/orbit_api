@@ -185,11 +185,17 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             item_node = ET.SubElement(sales_order_items, "Item")
             
             sku = ET.SubElement(item_node, "Sku")
-            sku.text = str(item.product_code)
+            sku_code = item.product_code
+            if getattr(item, "product", None) and getattr(item.product, "product_code", None):
+                sku_code = item.product.product_code
+            sku.text = str(sku_code)
 
-            if getattr(item, "product_name", None):
+            item_name = getattr(item, "product_name", None)
+            if getattr(item, "product", None) and getattr(item.product, "product_name", None):
+                item_name = item.product.product_name
+            if item_name:
                 name = ET.SubElement(item_node, "Name")
-                name.text = str(item.product_name)
+                name.text = str(item_name)
             
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
