@@ -259,9 +259,45 @@ def generate_zynk_customer_xml(shops: List) -> str:
         company_name = ET.SubElement(customer, "CompanyName")
         company_name.text = str(shop.company_name)
 
+        name_node = ET.SubElement(customer, "Name")
+        name_node.text = str(shop.company_name)
+
         if shop.contact_name:
             contact_name = ET.SubElement(customer, "ContactName")
             contact_name.text = str(shop.contact_name)
+
+        tax_code = ET.SubElement(customer, "TaxCode")
+        tax_code.text = "1"
+
+        def_tax_code = ET.SubElement(customer, "DefaultTaxCode")
+        def_tax_code.text = "1"
+
+        # Sanitize Country Code to 2-letter ISO (e.g. GB)
+        country_code = "GB"
+        if shop.country:
+            c_upper = str(shop.country).strip().upper()
+            if c_upper in ("UNITED KINGDOM", "UK", "GREAT BRITAIN", "ENGLAND", "GB"):
+                country_code = "GB"
+            else:
+                country_code = c_upper[:2]
+
+        # Top-level address & contact fields for Zynk Auto-Mapper compatibility
+        addr1 = ET.SubElement(customer, "Address1")
+        addr1.text = str(shop.address)
+        if shop.address_line_2:
+            addr2 = ET.SubElement(customer, "Address2")
+            addr2.text = str(shop.address_line_2)
+        town = ET.SubElement(customer, "Town")
+        town.text = str(shop.city)
+        postcode = ET.SubElement(customer, "Postcode")
+        postcode.text = str(shop.postcode)
+        country = ET.SubElement(customer, "Country")
+        country.text = country_code
+        tel = ET.SubElement(customer, "Telephone")
+        tel.text = str(shop.phone_number)
+        if shop.user and shop.user.email:
+            email = ET.SubElement(customer, "Email")
+            email.text = str(shop.user.email)
 
         # CustomerInvoiceAddress
         invoice_address = ET.SubElement(customer, "CustomerInvoiceAddress")
@@ -275,7 +311,7 @@ def generate_zynk_customer_xml(shops: List) -> str:
         inv_postcode = ET.SubElement(invoice_address, "Postcode")
         inv_postcode.text = str(shop.postcode)
         inv_country = ET.SubElement(invoice_address, "Country")
-        inv_country.text = str(shop.country or "GB")
+        inv_country.text = country_code
         inv_tel = ET.SubElement(invoice_address, "Telephone")
         inv_tel.text = str(shop.phone_number)
         if shop.telephone_2:
@@ -303,7 +339,7 @@ def generate_zynk_customer_xml(shops: List) -> str:
         del_postcode = ET.SubElement(delivery_address, "Postcode")
         del_postcode.text = str(shop.postcode)
         del_country = ET.SubElement(delivery_address, "Country")
-        del_country.text = str(shop.country or "GB")
+        del_country.text = country_code
         del_tel = ET.SubElement(delivery_address, "Telephone")
         del_tel.text = str(shop.phone_number)
         if shop.telephone_2:
