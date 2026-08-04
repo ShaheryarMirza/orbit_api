@@ -1162,11 +1162,12 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
     ]
 
     address_box = [
-        Paragraph("<b>BILLING & DELIVERY ADDRESS</b>", bold_text),
+        Paragraph("<b>BILLING ADDRESS</b>", bold_text),
         Spacer(1, 4),
-        Paragraph(f"<b>Address:</b> {address}", normal_text),
-        Paragraph(f"<b>Country:</b> {getattr(shop, 'country', 'United Kingdom')}", normal_text),
-        Paragraph(f"<b>Payment Terms:</b> B2B Trade Account", normal_text),
+        Paragraph("<b>Orbit Food Ltd</b>", normal_text),
+        Paragraph("Unit 01 pool street", normal_text),
+        Paragraph("Wv24HN", normal_text),
+        Paragraph("<b>Payment Terms:</b> B2B Trade Account", normal_text),
     ]
 
     info_table = Table([[cust_box, address_box]], colWidths=[260, 262])
