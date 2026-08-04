@@ -1166,8 +1166,7 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
         Spacer(1, 4),
         Paragraph("<b>Orbit Food Ltd</b>", normal_text),
         Paragraph("Unit 01 pool street", normal_text),
-        Paragraph("Wv24HN", normal_text),
-        Paragraph("<b>Payment Terms:</b> B2B Trade Account", normal_text),
+        Paragraph("WV2 4HN", normal_text),
     ]
 
     info_table = Table([[cust_box, address_box]], colWidths=[260, 262])
