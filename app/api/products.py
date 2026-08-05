@@ -126,7 +126,10 @@ def list_products(
     subcategory_id: int | None = None,
     category_slug: str | None = None,
     subcategory_slug: str | None = None,
-    is_active: bool | None = True,
+    is_active: str | bool | None = Query(
+        default="true",
+        description="Filter active status: 'true', 'false', 'all', or None",
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100000),
 ) -> ProductListResponse:
@@ -141,7 +144,15 @@ def list_products(
     if subcategory_slug:
         query = query.join(Product.subcategory).filter(SubCategory.slug == subcategory_slug)
     if is_active is not None:
-        query = query.filter(Product.is_active.is_(is_active))
+        if isinstance(is_active, bool):
+            query = query.filter(Product.is_active.is_(is_active))
+        elif isinstance(is_active, str):
+            val = is_active.strip().lower()
+            if val in ("true", "1"):
+                query = query.filter(Product.is_active.is_(True))
+            elif val in ("false", "0"):
+                query = query.filter(Product.is_active.is_(False))
+            # if val == "all", do not apply filter
     if search:
         search_pattern = f"%{search.strip()}%"
         query = query.filter(
