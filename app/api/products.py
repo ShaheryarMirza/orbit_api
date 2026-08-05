@@ -56,18 +56,21 @@ def get_active_subcategory_or_404(subcategory_id: int, db: Session) -> SubCatego
     return subcategory
 
 
-def get_active_product_or_404(product_id: int, db: Session) -> Product:
-    product = (
-        db.query(Product)
-        .filter(Product.id == product_id, Product.is_active.is_(True))
-        .first()
-    )
+def get_product_or_404(product_id: int, db: Session, active_only: bool = False) -> Product:
+    query = db.query(Product).filter(Product.id == product_id)
+    if active_only:
+        query = query.filter(Product.is_active.is_(True))
+    product = query.first()
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
     return product
+
+
+def get_active_product_or_404(product_id: int, db: Session) -> Product:
+    return get_product_or_404(product_id, db, active_only=True)
 
 
 @router.post(
@@ -431,7 +434,8 @@ def get_product(
     current_user: User = Depends(read_roles),
     db: Session = Depends(get_db),
 ) -> Product:
-    return get_active_product_or_404(product_id, db)
+    is_staff_or_admin = current_user.role in ("admin", "root_admin", "salesperson")
+    return get_product_or_404(product_id, db, active_only=not is_staff_or_admin)
 
 
 @router.patch(
@@ -446,7 +450,7 @@ def update_product(
     current_user: User = Depends(admin_role),
     db: Session = Depends(get_db),
 ) -> Product:
-    product = get_active_product_or_404(product_id, db)
+    product = get_product_or_404(product_id, db, active_only=False)
 
     if "category_id" in payload.model_fields_set:
         if payload.category_id is not None:
@@ -510,7 +514,7 @@ def delete_product(
     current_user: User = Depends(admin_role),
     db: Session = Depends(get_db),
 ) -> Product:
-    product = get_active_product_or_404(product_id, db)
+    product = get_product_or_404(product_id, db, active_only=False)
     product.is_active = False
     product.sage_sync_status = "pending_delete"
     db.commit()
@@ -530,7 +534,7 @@ def upload_product_image(
     current_user: User = Depends(admin_role),
     db: Session = Depends(get_db),
 ) -> Product:
-    product = get_active_product_or_404(product_id, db)
+    product = get_product_or_404(product_id, db, active_only=False)
     file_url = save_upload_file(file, "products")
     product.image_url = file_url
     db.commit()
