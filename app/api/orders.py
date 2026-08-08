@@ -1202,21 +1202,28 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
     cell_bold = ParagraphStyle('CellBold', parent=bold_text, fontSize=8, leading=10)
 
     subtotal_ex_vat = 0.0
-    total_vat = 0.0
+    calc_vat_total = 0.0
 
     for idx, item in enumerate(order.items, start=1):
         p_code = item.product_code or "-"
         p_name = item.product_name or "-"
         qty = item.quantity
         price = float(item.unit_price)
-        vat_rate = float(getattr(item, "vat_rate", 20.0) or 20.0)
 
+        # 1. Map Dynamic VAT Rate (strictly pull item.vat_rate, do NOT convert 0.0 to 20.0 via falsy 'or')
+        raw_vat = getattr(item, "vat_rate", None)
+        vat_rate = float(raw_vat) if raw_vat is not None else 20.0
+
+        # 2. Fix Line Item Totals:
+        # Formula: (Unit Price * Quantity) * (1 + (Item VAT Rate / 100))
         line_ex = price * qty
         line_vat = line_ex * (vat_rate / 100.0)
-        line_inc = line_ex + line_vat
+        line_inc = line_ex * (1.0 + (vat_rate / 100.0))
 
         subtotal_ex_vat += line_ex
-        total_vat += line_vat
+        calc_vat_total += line_vat
+
+        vat_rate_str = f"{vat_rate:.0f}%" if vat_rate.is_integer() else f"{vat_rate:.1f}%"
 
         table_data.append([
             Paragraph(str(idx), cell_style),
@@ -1224,12 +1231,18 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
             Paragraph(p_name, cell_style),
             Paragraph(str(qty), cell_style),
             Paragraph(f"£{price:.2f}", cell_style),
-            Paragraph(f"{vat_rate:.0f}%", cell_style),
+            Paragraph(vat_rate_str, cell_style),
             Paragraph(f"£{line_ex:.2f}", cell_style),
             Paragraph(f"£{line_inc:.2f}", cell_bold),
         ])
 
-    grand_total = subtotal_ex_vat + total_vat
+    # 3. Document Grand Totals (matching UI totals & database exact figures)
+    subtotal_val = float(order.subtotal) if order.subtotal is not None else subtotal_ex_vat
+    discount_amount = float(order.discount_amount or 0.0)
+    net_subtotal = max(0.0, subtotal_val - discount_amount)
+
+    total_vat = float(order.total_vat) if getattr(order, "total_vat", None) is not None else calc_vat_total
+    grand_total = net_subtotal + total_vat
 
     items_table = Table(table_data, colWidths=[20, 75, 165, 30, 65, 42, 60, 65])
 
@@ -1253,11 +1266,28 @@ def generate_sales_order_pdf_bytes(order: Order) -> bytes:
 
     # 4. Totals Box
     totals_data = [
-        [Paragraph("<b>Subtotal (Excl. VAT):</b>", normal_text), Paragraph(f"£{subtotal_ex_vat:.2f}", bold_text)],
-        [Paragraph("<b>Total VAT:</b>", normal_text), Paragraph(f"£{total_vat:.2f}", bold_text)],
-        [Paragraph("<b>Grand Total (Incl. VAT):</b>", ParagraphStyle('GrandTitle', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488'))),
-         Paragraph(f"<b>£{grand_total:.2f}</b>", ParagraphStyle('GrandVal', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488')))]
+        [Paragraph("<b>Subtotal (Excl. VAT):</b>", normal_text), Paragraph(f"£{subtotal_val:.2f}", bold_text)]
     ]
+
+    if discount_amount > 0:
+        disc_label = "Discount"
+        if order.discount_type == "percentage" and order.discount_value:
+            disc_label += f" ({float(order.discount_value):.0f}%)"
+        elif order.discount_type == "fixed":
+            disc_label += " (Fixed)"
+
+        totals_data.append([
+            Paragraph(f"<b>{disc_label}:</b>", normal_text),
+            Paragraph(f"-£{discount_amount:.2f}", bold_text)
+        ])
+
+    totals_data.extend([
+        [Paragraph("<b>Total VAT:</b>", normal_text), Paragraph(f"£{total_vat:.2f}", bold_text)],
+        [
+            Paragraph("<b>Grand Total (Incl. VAT):</b>", ParagraphStyle('GrandTitle', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488'))),
+            Paragraph(f"<b>£{grand_total:.2f}</b>", ParagraphStyle('GrandVal', parent=bold_text, fontSize=10, textColor=colors.HexColor('#0D9488')))
+        ]
+    ])
 
     totals_table = Table(totals_data, colWidths=[140, 90])
     totals_table.setStyle(TableStyle([
