@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Header, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
@@ -160,6 +160,8 @@ class CustomersSyncSuccessRequest(BaseModel):
 
 @router.get("/api/sage/customers/pending")
 def get_pending_customers_for_zynk(
+    request: Request,
+    format: str | None = Query(default=None),
     db: Session = Depends(get_db),
     token: str = Depends(verify_zynk_token)
 ):
@@ -170,6 +172,60 @@ def get_pending_customers_for_zynk(
         .filter(Shop.needs_sage_sync == True)
         .all()
     )
+
+    accept_header = request.headers.get("accept", "")
+    if (format and format.lower() == "json") or "application/json" in accept_header:
+        customer_list = []
+        for shop in shops:
+            contact_val = str(shop.contact_name or (shop.user.name if shop.user else "") or "").strip()
+            customer_list.append({
+                "Id": shop.account_ref,
+                "UniqueId": shop.account_ref,
+                "AccountReference": shop.account_ref,
+                "CompanyName": shop.company_name,
+                "Name": shop.company_name,
+                "ContactName": contact_val,
+                "contact_name": contact_val,
+                "TaxCode": "1",
+                "DefaultTaxCode": "1",
+                "Address1": shop.address,
+                "Address2": shop.address_line_2,
+                "Town": shop.city,
+                "Postcode": shop.postcode,
+                "Country": shop.country or "GB",
+                "Telephone": shop.phone_number,
+                "Telephone2": shop.telephone_2,
+                "Telephone3": shop.telephone_3,
+                "Email": shop.user.email if shop.user else None,
+                "Fax": shop.fax,
+                "Website": shop.website,
+                "VatNumber": shop.company_registration_number,
+                "CustomerInvoiceAddress": {
+                    "Address1": shop.address,
+                    "Address2": shop.address_line_2,
+                    "Town": shop.city,
+                    "Postcode": shop.postcode,
+                    "Country": shop.country or "GB",
+                    "Telephone": shop.phone_number,
+                    "Email": shop.user.email if shop.user else None,
+                    "ContactName": contact_val,
+                    "contact_name": contact_val,
+                },
+                "CustomerDeliveryAddress": {
+                    "Address1": shop.address,
+                    "Address2": shop.address_line_2,
+                    "Town": shop.city,
+                    "Postcode": shop.postcode,
+                    "Country": shop.country or "GB",
+                    "Telephone": shop.phone_number,
+                    "Email": shop.user.email if shop.user else None,
+                    "ContactName": contact_val,
+                    "contact_name": contact_val,
+                }
+            })
+        import json
+        return Response(content=json.dumps({"Company": {"Customers": {"Customer": customer_list}}}), media_type="application/json")
+
     xml_data = generate_zynk_customer_xml(shops)
     return Response(content=xml_data, media_type="application/xml")
 

@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.models.order import Order, OrderItem
 from app.models.shop import SageSyncStatus, Shop, ShopApprovalStatus
 from app.models.user import User
-from app.schemas.shop import ShopApprovalUpdate, ShopCreate, ShopListResponse, ShopResponse, ShopProfileUpdate
+from app.schemas.shop import ShopApprovalUpdate, ShopCreate, ShopListResponse, ShopResponse, ShopProfileUpdate, ShopUpdate
 
 
 router = APIRouter(tags=["shops"])
@@ -81,9 +81,12 @@ def register_shop(
                     max_num = val
     next_ref = f"OR1{max_num + 1}"
 
+    contact_name_val = payload.contact_name.strip() if payload.contact_name else current_user.name
+
     shop = Shop(
         user_id=current_user.id,
         company_name=payload.company_name.strip(),
+        contact_name=contact_name_val,
         phone_number=payload.phone_number.strip(),
         address=payload.address.strip(),
         address_line_2=(
@@ -110,6 +113,8 @@ def register_shop(
             else None
         ),
         account_ref=next_ref,
+        needs_sage_sync=True,
+        sage_sync_status=SageSyncStatus.PENDING.value,
     )
 
     db.add(shop)
@@ -204,6 +209,8 @@ def update_shop_approval(
     shop.approval_status = payload.approval_status.value
     if payload.approval_status == ShopApprovalStatus.APPROVED:
         shop.is_approved = True
+        shop.needs_sage_sync = True
+        shop.sage_sync_status = SageSyncStatus.PENDING.value
     elif payload.approval_status == ShopApprovalStatus.REJECTED:
         shop.is_approved = False
 
@@ -215,6 +222,7 @@ def update_shop_approval(
 
 
 @router.patch("/shops/profile", response_model=ShopResponse)
+@router.put("/shops/profile", response_model=ShopResponse)
 def update_shop_profile(
     payload: ShopProfileUpdate,
     current_user: User = Depends(require_roles("shop_owner")),
@@ -255,6 +263,74 @@ def update_shop_profile(
 
     # Track Sage Sync
     shop.needs_sage_sync = True
+    shop.sage_sync_status = SageSyncStatus.PENDING.value
+
+    db.commit()
+    db.refresh(shop)
+    return shop
+
+
+@router.patch("/admin/shops/{shop_id}", response_model=ShopResponse)
+@router.put("/admin/shops/{shop_id}", response_model=ShopResponse)
+@router.patch("/api/admin/shops/{shop_id}", response_model=ShopResponse)
+@router.put("/api/admin/shops/{shop_id}", response_model=ShopResponse)
+def update_shop_by_admin(
+    shop_id: int,
+    payload: ShopUpdate,
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
+) -> Shop:
+    shop = db.get(Shop, shop_id)
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Shop not found",
+        )
+
+    if payload.email and shop.user:
+        email = payload.email.strip().lower()
+        if email != shop.user.email:
+            existing = db.query(User).filter(User.email == email).first()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email is already in use by another account",
+                )
+            shop.user.email = email
+
+    if payload.company_name is not None:
+        shop.company_name = payload.company_name.strip()
+    if payload.contact_name is not None:
+        shop.contact_name = payload.contact_name.strip()
+        if shop.user:
+            shop.user.name = payload.contact_name.strip()
+    if payload.phone_number is not None:
+        shop.phone_number = payload.phone_number.strip()
+    if payload.telephone_2 is not None:
+        shop.telephone_2 = payload.telephone_2.strip() if payload.telephone_2 else None
+    if payload.telephone_3 is not None:
+        shop.telephone_3 = payload.telephone_3.strip() if payload.telephone_3 else None
+    if payload.address is not None:
+        shop.address = payload.address.strip()
+    if payload.address_line_2 is not None:
+        shop.address_line_2 = payload.address_line_2.strip() if payload.address_line_2 else None
+    if payload.postcode is not None:
+        shop.postcode = payload.postcode.strip()
+    if payload.city is not None:
+        shop.city = payload.city.strip()
+    if payload.country is not None:
+        shop.country = payload.country.strip()
+    if payload.company_registration_number is not None:
+        shop.company_registration_number = payload.company_registration_number.strip() if payload.company_registration_number else None
+    if payload.fax is not None:
+        shop.fax = payload.fax.strip() if payload.fax else None
+    if payload.website is not None:
+        shop.website = payload.website.strip() if payload.website else None
+    if payload.account_ref is not None:
+        shop.account_ref = payload.account_ref.strip()
+
+    shop.needs_sage_sync = True
+    shop.sage_sync_status = SageSyncStatus.PENDING.value
 
     db.commit()
     db.refresh(shop)
@@ -287,6 +363,8 @@ def approve_shop_direct(
         )
     shop.approval_status = ShopApprovalStatus.APPROVED.value
     shop.is_approved = True
+    shop.needs_sage_sync = True
+    shop.sage_sync_status = SageSyncStatus.PENDING.value
     db.commit()
     db.refresh(shop)
     return shop

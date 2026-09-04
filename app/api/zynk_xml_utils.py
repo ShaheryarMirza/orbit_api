@@ -80,6 +80,10 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 inv_email = ET.SubElement(invoice_address, "Email")
                 inv_email.text = order.shop.user.email
 
+            contact_val = str(order.shop.contact_name or (order.shop.user.name if order.shop.user else "") or "").strip()
+            inv_contact = ET.SubElement(invoice_address, "ContactName")
+            inv_contact.text = contact_val
+
             # CustomerDeliveryAddress
             delivery_address = ET.SubElement(customer_node, "CustomerDeliveryAddress")
             del_addr1 = ET.SubElement(delivery_address, "Address1")
@@ -101,6 +105,9 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             if order.shop.user and getattr(order.shop.user, "email", None):
                 del_email = ET.SubElement(delivery_address, "Email")
                 del_email.text = order.shop.user.email
+
+            del_contact = ET.SubElement(delivery_address, "ContactName")
+            del_contact.text = contact_val
 
         # 3. SalesOrderDate mapped from created_at
         sales_order_date = ET.SubElement(sales_order, "SalesOrderDate")
@@ -262,9 +269,9 @@ def generate_zynk_customer_xml(shops: List) -> str:
         name_node = ET.SubElement(customer, "Name")
         name_node.text = str(shop.company_name)
 
-        if shop.contact_name:
-            contact_name = ET.SubElement(customer, "ContactName")
-            contact_name.text = str(shop.contact_name)
+        contact_val = str(shop.contact_name or (shop.user.name if shop.user else "") or "").strip()
+        contact_name = ET.SubElement(customer, "ContactName")
+        contact_name.text = contact_val
 
         tax_code = ET.SubElement(customer, "TaxCode")
         tax_code.text = "1"
@@ -298,6 +305,8 @@ def generate_zynk_customer_xml(shops: List) -> str:
         if shop.user and shop.user.email:
             email = ET.SubElement(customer, "Email")
             email.text = str(shop.user.email)
+        top_contact = ET.SubElement(customer, "Contact")
+        top_contact.text = contact_val
 
         # CustomerInvoiceAddress
         invoice_address = ET.SubElement(customer, "CustomerInvoiceAddress")
@@ -323,9 +332,8 @@ def generate_zynk_customer_xml(shops: List) -> str:
         if shop.user and shop.user.email:
             inv_email = ET.SubElement(invoice_address, "Email")
             inv_email.text = str(shop.user.email)
-        if shop.contact_name:
-            inv_contact = ET.SubElement(invoice_address, "ContactName")
-            inv_contact.text = str(shop.contact_name)
+        inv_contact = ET.SubElement(invoice_address, "ContactName")
+        inv_contact.text = contact_val
 
         # CustomerDeliveryAddress
         delivery_address = ET.SubElement(customer, "CustomerDeliveryAddress")
@@ -351,9 +359,8 @@ def generate_zynk_customer_xml(shops: List) -> str:
         if shop.user and shop.user.email:
             del_email = ET.SubElement(delivery_address, "Email")
             del_email.text = str(shop.user.email)
-        if shop.contact_name:
-            del_contact = ET.SubElement(delivery_address, "ContactName")
-            del_contact.text = str(shop.contact_name)
+        del_contact = ET.SubElement(delivery_address, "ContactName")
+        del_contact.text = contact_val
 
     return ET.tostring(company, encoding="utf-8").decode("utf-8")
 

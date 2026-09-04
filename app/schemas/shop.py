@@ -64,6 +64,24 @@ class ShopProfileUpdate(BaseModel):
     telephone_3: str | None = Field(default=None, max_length=50)
 
 
+class ShopUpdate(BaseModel):
+    company_name: str | None = Field(default=None, min_length=1, max_length=255)
+    contact_name: str | None = Field(default=None, min_length=1, max_length=255)
+    email: str | None = Field(default=None, min_length=1, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=50)
+    telephone_2: str | None = Field(default=None, max_length=50)
+    telephone_3: str | None = Field(default=None, max_length=50)
+    address: str | None = Field(default=None, max_length=500)
+    address_line_2: str | None = Field(default=None, max_length=255)
+    postcode: str | None = Field(default=None, max_length=20)
+    city: str | None = Field(default=None, max_length=100)
+    country: str | None = Field(default=None, max_length=100)
+    company_registration_number: str | None = Field(default=None, max_length=50)
+    fax: str | None = Field(default=None, max_length=50)
+    website: str | None = Field(default=None, max_length=255)
+    account_ref: str | None = Field(default=None, max_length=100)
+
+
 class ShopApprovalUpdate(BaseModel):
     approval_status: ShopApprovalStatus
     account_ref: str | None = Field(default=None, max_length=100)
