@@ -87,6 +87,8 @@ def get_pending_orders_for_zynk(
                     "Name": item.product_name,
                     "QtyOrdered": item.quantity,
                     "UnitPrice": f"{net_unit_price:.2f}",
+                    "UnitDiscountPercentage": "0.00",
+                    "UnitDiscountAmount": "0.00",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                 })
 
@@ -94,6 +96,8 @@ def get_pending_orders_for_zynk(
                 "Id": str(order.id),
                 "AccountReference": str(account_ref_val),
                 "SalesOrderDate": order.created_at.strftime("%Y-%m-%dT%H:%M:%S") if order.created_at else None,
+                "NetValueDiscountPercent": "0.00",
+                "NetValueDiscount": "0.00",
                 "SalesOrderItems": {"Item": items_list},
             }
             if disc_amount > 0 or disc_val > 0:

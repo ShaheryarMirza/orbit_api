@@ -163,20 +163,18 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 fax_del.text = order.shop.fax
 
         # 5b. Order-Level Discounts & Audit Notes
-        # Option B: Pass explicit Net (already discounted) Unit Prices for each line item,
-        # and do not output order-level or line-level discount deduction nodes so Sage 50
-        # does not apply a second discount.
+        # Net Pricing (Option A): Set <UnitPrice> for each item to its final net price (after discount),
+        # explicitly set header & line discount nodes to 0.00 so Sage 50 does not apply a second discount.
         disc_amount = float(getattr(order, "discount_amount", 0) or 0)
         disc_type = getattr(order, "discount_type", None)
         disc_val = float(getattr(order, "discount_value", 0) or 0)
         subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
-        # Calculate effective discount rate across order lines
-        effective_discount_rate = 0.0
-        if disc_type == "percentage" and disc_val > 0:
-            effective_discount_rate = disc_val / 100.0
-        elif disc_amount > 0 and subtotal_val > 0:
-            effective_discount_rate = disc_amount / subtotal_val
+        # Header-level discount nodes explicitly set to 0.00 to lock math in Sage 50
+        disc_pct = ET.SubElement(sales_order, "NetValueDiscountPercent")
+        disc_pct.text = "0.00"
+        disc_net = ET.SubElement(sales_order, "NetValueDiscount")
+        disc_net.text = "0.00"
 
         # Audit note on order if a discount was applied in portal
         if disc_amount > 0 or disc_val > 0:
@@ -186,10 +184,38 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             else:
                 notes_node.text = f"Includes £{disc_amount:.2f} Fixed Portal Discount. Line item unit prices are net of discount."
 
+        # Calculate exact net unit price for each item so sum(UnitPrice * Qty) == (Subtotal - Discount)
+        target_net_subtotal = round(subtotal_val - disc_amount, 2)
+        items_list = list(order.items)
+        net_unit_prices = []
+
+        if disc_amount > 0 and subtotal_val > 0:
+            effective_rate = disc_amount / subtotal_val
+            for item in items_list:
+                gross_price = float(item.unit_price)
+                net_price = round(gross_price * (1.0 - effective_rate), 2)
+                net_unit_prices.append(net_price)
+
+            # Rounding adjustment to align sum(UnitPrice * Qty) exactly to target_net_subtotal
+            calc_subtotal = sum(p * item.quantity for p, item in zip(net_unit_prices, items_list))
+            diff = round(target_net_subtotal - calc_subtotal, 2)
+            if diff != 0 and items_list:
+                # Find an item with quantity 1 if possible, or adjust last item
+                idx_to_adjust = len(items_list) - 1
+                for idx, item in enumerate(items_list):
+                    if item.quantity == 1:
+                        idx_to_adjust = idx
+                        break
+                adjusted_price = round(net_unit_prices[idx_to_adjust] + (diff / items_list[idx_to_adjust].quantity), 2)
+                net_unit_prices[idx_to_adjust] = max(0.0, adjusted_price)
+        else:
+            for item in items_list:
+                net_unit_prices.append(float(item.unit_price))
+
         # 6. Items mapping
         sales_order_items = ET.SubElement(sales_order, "SalesOrderItems")
         
-        for item in order.items:
+        for item, net_unit_price in zip(items_list, net_unit_prices):
             item_node = ET.SubElement(sales_order_items, "Item")
             
             sku = ET.SubElement(item_node, "Sku")
@@ -208,15 +234,14 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
             
-            # Net Unit Price calculation (Option B: net of discount)
-            gross_unit_price = float(item.unit_price)
-            if effective_discount_rate > 0:
-                net_unit_price = round(gross_unit_price * (1.0 - effective_discount_rate), 2)
-            else:
-                net_unit_price = gross_unit_price
-
             unit_price = ET.SubElement(item_node, "UnitPrice")
             unit_price.text = f"{net_unit_price:.2f}"
+
+            # Explicitly set line-level discount tags to 0.00
+            unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
+            unit_disc_pct.text = "0.00"
+            unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
+            unit_disc_amt.text = "0.00"
 
             tax_rate = ET.SubElement(item_node, "TaxRate")
             tax_rate.text = str(getattr(item, "vat_rate", 20.0))
