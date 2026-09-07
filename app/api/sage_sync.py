@@ -42,6 +42,8 @@ verify_zynk_token = verify_zynk_api_key
 
 @router.get("/api/sage/orders/pending")
 def get_pending_orders_for_zynk(
+    request: Request,
+    format: str | None = Query(default=None),
     db: Session = Depends(get_db),
     token: str = Depends(verify_zynk_token)
 ):
@@ -52,6 +54,55 @@ def get_pending_orders_for_zynk(
         .filter(Order.sage_sync_status != OrderSageSyncStatus.SYNCED.value)
         .all()
     )
+
+    accept_header = request.headers.get("accept", "")
+    if (format and format.lower() == "json") or "application/json" in accept_header:
+        sales_orders_list = []
+        for order in orders:
+            account_ref_val = getattr(order, "account_ref", None) or getattr(order, "sage_account_reference", None) or ""
+            if not account_ref_val and order.shop:
+                account_ref_val = getattr(order.shop, "account_ref", None) or ""
+
+            disc_amount = float(getattr(order, "discount_amount", 0) or 0)
+            disc_type = getattr(order, "discount_type", None)
+            disc_val = float(getattr(order, "discount_value", 0) or 0)
+            subtotal_val = float(getattr(order, "subtotal", 0) or 0)
+
+            effective_discount_rate = 0.0
+            if disc_type == "percentage" and disc_val > 0:
+                effective_discount_rate = disc_val / 100.0
+            elif disc_amount > 0 and subtotal_val > 0:
+                effective_discount_rate = disc_amount / subtotal_val
+
+            items_list = []
+            for item in order.items:
+                gross_unit_price = float(item.unit_price)
+                if effective_discount_rate > 0:
+                    net_unit_price = round(gross_unit_price * (1.0 - effective_discount_rate), 2)
+                else:
+                    net_unit_price = gross_unit_price
+
+                items_list.append({
+                    "Sku": item.product_code,
+                    "Name": item.product_name,
+                    "QtyOrdered": item.quantity,
+                    "UnitPrice": f"{net_unit_price:.2f}",
+                    "TaxRate": getattr(item, "vat_rate", 20.0),
+                })
+
+            order_data = {
+                "Id": str(order.id),
+                "AccountReference": str(account_ref_val),
+                "SalesOrderDate": order.created_at.strftime("%Y-%m-%dT%H:%M:%S") if order.created_at else None,
+                "SalesOrderItems": {"Item": items_list},
+            }
+            if disc_amount > 0 or disc_val > 0:
+                order_data["Notes"] = f"Includes portal discount. Line item unit prices are net of discount."
+
+            sales_orders_list.append(order_data)
+
+        import json
+        return Response(content=json.dumps({"Company": {"SalesOrders": {"SalesOrder": sales_orders_list}}}), media_type="application/json")
 
     xml_data = generate_zynk_sales_order_xml(orders)
 

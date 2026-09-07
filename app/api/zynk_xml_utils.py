@@ -162,28 +162,29 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 fax_del = ET.SubElement(sales_order_del_address, "Fax")
                 fax_del.text = order.shop.fax
 
-        # 5b. Order-Level Discounts (Zynk Net Value Discount)
+        # 5b. Order-Level Discounts & Audit Notes
+        # Option B: Pass explicit Net (already discounted) Unit Prices for each line item,
+        # and do not output order-level or line-level discount deduction nodes so Sage 50
+        # does not apply a second discount.
         disc_amount = float(getattr(order, "discount_amount", 0) or 0)
         disc_type = getattr(order, "discount_type", None)
         disc_val = float(getattr(order, "discount_value", 0) or 0)
+        subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
+        # Calculate effective discount rate across order lines
+        effective_discount_rate = 0.0
+        if disc_type == "percentage" and disc_val > 0:
+            effective_discount_rate = disc_val / 100.0
+        elif disc_amount > 0 and subtotal_val > 0:
+            effective_discount_rate = disc_amount / subtotal_val
+
+        # Audit note on order if a discount was applied in portal
         if disc_amount > 0 or disc_val > 0:
-            disc_desc = ET.SubElement(sales_order, "NetValueDiscountDescription")
-            disc_desc.text = "Order Discount"
-
-            disc_comment = ET.SubElement(sales_order, "NetValueDiscountComment1")
+            notes_node = ET.SubElement(sales_order, "Notes")
             if disc_type == "percentage":
-                disc_comment.text = f"Percentage Discount ({disc_val:g}%)"
+                notes_node.text = f"Includes {disc_val:g}% Portal Discount (£{disc_amount:.2f}). Line item unit prices are net of discount."
             else:
-                disc_comment.text = f"Fixed Discount (£{disc_amount:.2f})"
-
-            if disc_type == "percentage" and disc_val > 0:
-                disc_pct = ET.SubElement(sales_order, "NetValueDiscountPercent")
-                disc_pct.text = f"{disc_val:.2f}"
-
-            if disc_amount > 0:
-                disc_net = ET.SubElement(sales_order, "NetValueDiscount")
-                disc_net.text = f"{disc_amount:.2f}"
+                notes_node.text = f"Includes £{disc_amount:.2f} Fixed Portal Discount. Line item unit prices are net of discount."
 
         # 6. Items mapping
         sales_order_items = ET.SubElement(sales_order, "SalesOrderItems")
@@ -207,28 +208,15 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
             
+            # Net Unit Price calculation (Option B: net of discount)
+            gross_unit_price = float(item.unit_price)
+            if effective_discount_rate > 0:
+                net_unit_price = round(gross_unit_price * (1.0 - effective_discount_rate), 2)
+            else:
+                net_unit_price = gross_unit_price
+
             unit_price = ET.SubElement(item_node, "UnitPrice")
-            unit_price.text = str(item.unit_price)
-
-            # Item-Level Unit Discounts
-            if disc_type == "percentage" and disc_val > 0:
-                unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
-                unit_disc_pct.text = f"{disc_val:.2f}"
-                
-                price_val = float(item.unit_price)
-                unit_disc_amt_val = round(price_val * (disc_val / 100.0), 2)
-                unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
-                unit_disc_amt.text = f"{unit_disc_amt_val:.2f}"
-            elif disc_amount > 0 and float(getattr(order, "subtotal", 0) or 0) > 0:
-                sub_val = float(order.subtotal)
-                effective_pct = (disc_amount / sub_val) * 100.0
-                unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
-                unit_disc_pct.text = f"{effective_pct:.2f}"
-
-                price_val = float(item.unit_price)
-                unit_disc_amt_val = round(price_val * (effective_pct / 100.0), 2)
-                unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
-                unit_disc_amt.text = f"{unit_disc_amt_val:.2f}"
+            unit_price.text = f"{net_unit_price:.2f}"
 
             tax_rate = ET.SubElement(item_node, "TaxRate")
             tax_rate.text = str(getattr(item, "vat_rate", 20.0))
