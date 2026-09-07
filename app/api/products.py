@@ -673,7 +673,8 @@ async def import_products(
 
             # Parse optional fields
             desc_val = str(row[col_desc]).strip() if col_desc and pd.notna(row[col_desc]) else None
-            image_val = str(row[col_image]).strip() if col_image and pd.notna(row[col_image]) else None
+            image_val_raw = str(row[col_image]).strip() if col_image and pd.notna(row[col_image]) else None
+            image_val = image_val_raw if (image_val_raw and image_val_raw.lower() not in ("none", "null", "nan", "")) else None
 
             # Add or update
             product = db.query(Product).filter(Product.product_code == product_code).first()
@@ -684,7 +685,8 @@ async def import_products(
                 product.vat_rate = vat_val
                 if category_id is not None:
                     product.category_id = category_id
-                if image_val is not None:
+                # Only update image_url if a valid non-empty string is provided; preserve existing image_url otherwise
+                if image_val:
                     product.image_url = image_val
                 db.flush()
                 created += 1
