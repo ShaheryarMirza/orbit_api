@@ -81,6 +81,7 @@ def get_pending_orders_for_zynk(
                     "DiscountAmount": "0.00",
                     "UnitDiscountPercentage": "0.00",
                     "UnitDiscountAmount": "0.00",
+                    "TaxAmount": f"{float(getattr(item, 'vat_amount', 0.0) or 0.0):.2f}",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                 })
 

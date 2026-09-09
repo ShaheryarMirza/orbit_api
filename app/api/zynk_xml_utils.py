@@ -247,6 +247,10 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
             unit_disc_amt.text = "0.00"
 
+            vat_amt_val = float(getattr(item, "vat_amount", 0.0) or 0.0)
+            tax_amount = ET.SubElement(item_node, "TaxAmount")
+            tax_amount.text = f"{vat_amt_val:.2f}"
+
             tax_rate = ET.SubElement(item_node, "TaxRate")
             tax_rate.text = str(getattr(item, "vat_rate", 20.0))
 

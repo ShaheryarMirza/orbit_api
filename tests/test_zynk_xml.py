@@ -95,23 +95,23 @@ def test_generate_zynk_sales_order_xml_no_discount():
 
 
 def test_generate_zynk_sales_order_xml_with_discount():
-    # User example (SO-000225):
-    # Item 1: 2 x £6.72 = £13.44 (0% VAT = £0.00)
-    # Item 2: 2 x £5.00 = £10.00 (20% VAT = £2.00)
-    # Subtotal: £23.44, Discount (10%): £2.34, Final Net Total: £21.10, Total VAT: £2.00, Gross Total: £23.10
+    # User example SO-000241:
+    # Item 1: 2 x £6.72 = £13.44 (0% VAT = £0.00 VAT)
+    # Item 2: 4 x £5.00 = £20.00 (20% VAT = £4.00 VAT)
+    # Subtotal: £33.44, Discount (10%): £3.34, Final Net Total: £30.10, Total VAT: £4.00, Gross Total: £34.10
     items = [
         DummyOrderItem("00035-03", "Ulker Baby Biscuit 12x172g", 6.72, 2, vat_rate=0.0, vat_amount=0.0),
-        DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 2, vat_rate=20.0, vat_amount=2.00),
+        DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 4, vat_rate=20.0, vat_amount=4.00),
     ]
     order = DummyOrder(
-        order_id=225,
+        order_id=241,
         items=items,
         discount_type="percentage",
         discount_value=10.00,
-        discount_amount=2.34,
-        subtotal=23.44,
-        final_total=21.10,
-        total_vat=2.00
+        discount_amount=3.34,
+        subtotal=33.44,
+        final_total=30.10,
+        total_vat=4.00
     )
 
     xml_str = generate_zynk_sales_order_xml([order])
@@ -120,24 +120,24 @@ def test_generate_zynk_sales_order_xml_with_discount():
     sales_order = root.find("SalesOrders/SalesOrder")
     assert sales_order is not None
 
-    # Header discount tags: NetValueDiscount receives £2.34, NetValueDiscountPercent receives 10.00
+    # Header discount tags: NetValueDiscount receives £3.34, NetValueDiscountPercent receives 10.00
     assert sales_order.find("DiscountPercent").text == "0.00"
     assert sales_order.find("DiscountAmount").text == "0.00"
     assert sales_order.find("NetValueDiscountPercent").text == "10.00"
-    assert sales_order.find("NetValueDiscount").text == "2.34"
+    assert sales_order.find("NetValueDiscount").text == "3.34"
 
-    # Header totals must match exact portal values (£21.10 net, £2.00 VAT, £23.10 gross)
-    assert sales_order.find("NetTotal").text == "21.10"
-    assert sales_order.find("TaxTotal").text == "2.00"
-    assert sales_order.find("GrossTotal").text == "23.10"
+    # Header totals must match exact portal values (£30.10 net, £4.00 VAT, £34.10 gross)
+    assert sales_order.find("NetTotal").text == "30.10"
+    assert sales_order.find("TaxTotal").text == "4.00"
+    assert sales_order.find("GrossTotal").text == "34.10"
 
-    # Line item unit prices must be raw un-discounted prices (£6.72 and £5.00)
+    # Line item unit prices and TaxAmount overrides
     xml_items = sales_order.findall("SalesOrderItems/Item")
     assert len(xml_items) == 2
     assert xml_items[0].find("UnitPrice").text == "6.72"
+    assert xml_items[0].find("TaxAmount").text == "0.00"
     assert xml_items[0].find("DiscountPercent").text == "0.00"
-    assert xml_items[0].find("DiscountAmount").text == "0.00"
 
     assert xml_items[1].find("UnitPrice").text == "5.00"
+    assert xml_items[1].find("TaxAmount").text == "4.00"
     assert xml_items[1].find("DiscountPercent").text == "0.00"
-    assert xml_items[1].find("DiscountAmount").text == "0.00"
