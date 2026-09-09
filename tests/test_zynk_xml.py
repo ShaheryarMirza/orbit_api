@@ -1,0 +1,143 @@
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from decimal import Decimal
+
+from app.api.zynk_xml_utils import generate_zynk_sales_order_xml
+
+
+class DummyShop:
+    def __init__(self):
+        self.account_ref = "CUST001"
+        self.company_name = "Acme Widgets Ltd"
+        self.company_registration_number = "GB123456789"
+        self.address = "123 High Street"
+        self.address_line_2 = "Suite 4"
+        self.city = "London"
+        self.postcode = "EC1A 1BB"
+        self.country = "GB"
+        self.phone_number = "02079460000"
+        self.fax = None
+        self.website = "https://acme.example.com"
+        self.contact_name = "John Doe"
+        self.user = None
+
+
+class DummyOrderItem:
+    def __init__(self, product_code, product_name, unit_price, quantity, vat_rate=20.0, vat_amount=0.0):
+        self.product_code = product_code
+        self.product_name = product_name
+        self.unit_price = Decimal(str(unit_price))
+        self.quantity = quantity
+        self.vat_rate = vat_rate
+        self.vat_amount = vat_amount
+
+
+class DummyOrder:
+    def __init__(self, order_id, items, discount_type=None, discount_value=0, discount_amount=0, subtotal=100.0, final_total=100.0, total_vat=20.0):
+        self.id = order_id
+        self.shop = DummyShop()
+        self.account_ref = "CUST001"
+        self.created_at = datetime(2026, 9, 7, 12, 0, 0)
+        self.items = items
+        self.discount_type = discount_type
+        self.discount_value = Decimal(str(discount_value)) if discount_value else None
+        self.discount_amount = Decimal(str(discount_amount))
+        self.subtotal = Decimal(str(subtotal))
+        self.final_total = Decimal(str(final_total))
+        self.total_vat = total_vat
+
+
+def test_generate_zynk_sales_order_xml_no_discount():
+    items = [
+        DummyOrderItem("PROD01", "Widget A", 50.00, 2, vat_rate=20.0, vat_amount=20.0)
+    ]
+    order = DummyOrder(
+        order_id=101,
+        items=items,
+        discount_type=None,
+        discount_value=0,
+        discount_amount=0,
+        subtotal=100.00,
+        final_total=100.00,
+        total_vat=20.00
+    )
+
+    xml_str = generate_zynk_sales_order_xml([order])
+    root = ET.fromstring(xml_str)
+
+    sales_order = root.find("SalesOrders/SalesOrder")
+    assert sales_order is not None
+
+    # Header discount tags
+    assert sales_order.find("DiscountPercent").text == "0.00"
+    assert sales_order.find("DiscountAmount").text == "0.00"
+    assert sales_order.find("NetValueDiscountPercent").text == "0.00"
+    assert sales_order.find("NetValueDiscount").text == "0.00"
+
+    # Header totals
+    assert sales_order.find("NetTotal").text == "100.00"
+    assert sales_order.find("TaxTotal").text == "20.00"
+    assert sales_order.find("GrossTotal").text == "120.00"
+
+    # Bypass flags
+    assert sales_order.find("OverRideCustomerDiscounts").text == "true"
+    assert sales_order.find("OverrideCustomerDiscounts").text == "true"
+    assert sales_order.find("BypassCustomerDiscounts").text == "true"
+
+    # Line item tags
+    item = sales_order.find("SalesOrderItems/Item")
+    assert item is not None
+    assert item.find("UnitPrice").text == "50.00"
+    assert item.find("DiscountPercent").text == "0.00"
+    assert item.find("DiscountAmount").text == "0.00"
+    assert item.find("UnitDiscountPercentage").text == "0.00"
+    assert item.find("UnitDiscountAmount").text == "0.00"
+
+
+def test_generate_zynk_sales_order_xml_with_discount():
+    # User example (SO-000225):
+    # Item 1: 2 x £6.72 = £13.44 (0% VAT = £0.00)
+    # Item 2: 2 x £5.00 = £10.00 (20% VAT = £2.00)
+    # Subtotal: £23.44, Discount (10%): £2.34, Final Net Total: £21.10, Total VAT: £2.00, Gross Total: £23.10
+    items = [
+        DummyOrderItem("00035-03", "Ulker Baby Biscuit 12x172g", 6.72, 2, vat_rate=0.0, vat_amount=0.0),
+        DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 2, vat_rate=20.0, vat_amount=2.00),
+    ]
+    order = DummyOrder(
+        order_id=225,
+        items=items,
+        discount_type="percentage",
+        discount_value=10.00,
+        discount_amount=2.34,
+        subtotal=23.44,
+        final_total=21.10,
+        total_vat=2.00
+    )
+
+    xml_str = generate_zynk_sales_order_xml([order])
+    root = ET.fromstring(xml_str)
+
+    sales_order = root.find("SalesOrders/SalesOrder")
+    assert sales_order is not None
+
+    # Header discount tags: NetValueDiscount receives £2.34, NetValueDiscountPercent receives 10.00
+    assert sales_order.find("DiscountPercent").text == "0.00"
+    assert sales_order.find("DiscountAmount").text == "0.00"
+    assert sales_order.find("NetValueDiscountPercent").text == "10.00"
+    assert sales_order.find("NetValueDiscount").text == "2.34"
+
+    # Header totals must match exact portal values (£21.10 net, £2.00 VAT, £23.10 gross)
+    assert sales_order.find("NetTotal").text == "21.10"
+    assert sales_order.find("TaxTotal").text == "2.00"
+    assert sales_order.find("GrossTotal").text == "23.10"
+
+    # Line item unit prices must be raw un-discounted prices (£6.72 and £5.00)
+    xml_items = sales_order.findall("SalesOrderItems/Item")
+    assert len(xml_items) == 2
+    assert xml_items[0].find("UnitPrice").text == "6.72"
+    assert xml_items[0].find("DiscountPercent").text == "0.00"
+    assert xml_items[0].find("DiscountAmount").text == "0.00"
+
+    assert xml_items[1].find("UnitPrice").text == "5.00"
+    assert xml_items[1].find("DiscountPercent").text == "0.00"
+    assert xml_items[1].find("DiscountAmount").text == "0.00"

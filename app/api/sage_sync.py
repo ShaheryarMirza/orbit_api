@@ -68,36 +68,40 @@ def get_pending_orders_for_zynk(
             disc_val = float(getattr(order, "discount_value", 0) or 0)
             subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
-            effective_discount_rate = 0.0
-            if disc_type == "percentage" and disc_val > 0:
-                effective_discount_rate = disc_val / 100.0
-            elif disc_amount > 0 and subtotal_val > 0:
-                effective_discount_rate = disc_amount / subtotal_val
-
             items_list = []
             for item in order.items:
-                gross_unit_price = float(item.unit_price)
-                if effective_discount_rate > 0:
-                    net_unit_price = round(gross_unit_price * (1.0 - effective_discount_rate), 2)
-                else:
-                    net_unit_price = gross_unit_price
+                raw_unit_price = float(item.unit_price)
 
                 items_list.append({
                     "Sku": item.product_code,
                     "Name": item.product_name,
                     "QtyOrdered": item.quantity,
-                    "UnitPrice": f"{net_unit_price:.2f}",
+                    "UnitPrice": f"{raw_unit_price:.2f}",
+                    "DiscountPercent": "0.00",
+                    "DiscountAmount": "0.00",
                     "UnitDiscountPercentage": "0.00",
                     "UnitDiscountAmount": "0.00",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                 })
 
+            net_total_val = float(getattr(order, "final_total", 0) or 0)
+            tax_total_val = float(getattr(order, "total_vat", 0) or 0)
+            gross_total_val = round(net_total_val + tax_total_val, 2)
+
             order_data = {
                 "Id": str(order.id),
                 "AccountReference": str(account_ref_val),
                 "SalesOrderDate": order.created_at.strftime("%Y-%m-%dT%H:%M:%S") if order.created_at else None,
-                "NetValueDiscountPercent": "0.00",
-                "NetValueDiscount": "0.00",
+                "DiscountPercent": "0.00",
+                "DiscountAmount": "0.00",
+                "NetValueDiscountPercent": f"{disc_val:.2f}" if disc_type == "percentage" and disc_val > 0 else "0.00",
+                "NetValueDiscount": f"{disc_amount:.2f}",
+                "NetTotal": f"{net_total_val:.2f}",
+                "TaxTotal": f"{tax_total_val:.2f}",
+                "GrossTotal": f"{gross_total_val:.2f}",
+                "OverRideCustomerDiscounts": "true",
+                "OverrideCustomerDiscounts": "true",
+                "BypassCustomerDiscounts": "true",
                 "SalesOrderItems": {"Item": items_list},
             }
             if disc_amount > 0 or disc_val > 0:
