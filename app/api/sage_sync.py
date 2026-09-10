@@ -83,6 +83,24 @@ def get_pending_orders_for_zynk(
                     "UnitDiscountAmount": "0.00",
                     "TaxAmount": f"{float(getattr(item, 'vat_amount', 0.0) or 0.0):.2f}",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
+                    "TaxCode": "0" if float(getattr(item, "vat_rate", 20.0) or 0) == 0.0 else "1",
+                })
+
+            if disc_amount > 0:
+                disc_label = f"Order Discount ({disc_val:g}%)" if (disc_type == "percentage" and disc_val > 0) else f"Order Discount (£{disc_amount:.2f})"
+                items_list.append({
+                    "Sku": "S2",
+                    "Name": disc_label,
+                    "Description": disc_label,
+                    "QtyOrdered": 1,
+                    "UnitPrice": f"{-disc_amount:.2f}",
+                    "DiscountPercent": "0.00",
+                    "DiscountAmount": "0.00",
+                    "UnitDiscountPercentage": "0.00",
+                    "UnitDiscountAmount": "0.00",
+                    "TaxAmount": "0.00",
+                    "TaxRate": "0.0",
+                    "TaxCode": "0",
                 })
 
             net_total_val = float(getattr(order, "final_total", 0) or 0)
@@ -95,8 +113,8 @@ def get_pending_orders_for_zynk(
                 "SalesOrderDate": order.created_at.strftime("%Y-%m-%dT%H:%M:%S") if order.created_at else None,
                 "DiscountPercent": "0.00",
                 "DiscountAmount": "0.00",
-                "NetValueDiscountPercent": f"{disc_val:.2f}" if disc_type == "percentage" and disc_val > 0 else "0.00",
-                "NetValueDiscount": f"{disc_amount:.2f}",
+                "NetValueDiscountPercent": "0.00",
+                "NetValueDiscount": "0.00",
                 "NetTotal": f"{net_total_val:.2f}",
                 "TaxTotal": f"{tax_total_val:.2f}",
                 "GrossTotal": f"{gross_total_val:.2f}",

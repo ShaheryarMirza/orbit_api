@@ -168,16 +168,16 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
         disc_val = float(getattr(order, "discount_value", 0) or 0)
         subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
-        # Header-level discount nodes: NetValueDiscount receives portal overall discount (£2.34)
+        # Header-level discount nodes explicitly set to 0.00 to prevent Sage tax engine recalculation
         hdr_disc_pct = ET.SubElement(sales_order, "DiscountPercent")
         hdr_disc_pct.text = "0.00"
         hdr_disc_amt = ET.SubElement(sales_order, "DiscountAmount")
         hdr_disc_amt.text = "0.00"
 
         disc_pct = ET.SubElement(sales_order, "NetValueDiscountPercent")
-        disc_pct.text = f"{disc_val:.2f}" if disc_type == "percentage" and disc_val > 0 else "0.00"
+        disc_pct.text = "0.00"
         disc_net = ET.SubElement(sales_order, "NetValueDiscount")
-        disc_net.text = f"{disc_amount:.2f}"
+        disc_net.text = "0.00"
 
         # Explicitly pass exact portal-calculated values for NetTotal, TaxTotal, and GrossTotal
         net_total_val = float(getattr(order, "final_total", 0) or 0)
@@ -205,13 +205,13 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
         if disc_amount > 0 or disc_val > 0:
             notes_node = ET.SubElement(sales_order, "Notes")
             if disc_type == "percentage":
-                notes_node.text = f"Includes {disc_val:g}% Portal Discount (£{disc_amount:.2f}). Net Value Discount applied at order header."
+                notes_node.text = f"Includes {disc_val:g}% Portal Discount (£{disc_amount:.2f}). Applied as negative line item S2."
             else:
-                notes_node.text = f"Includes £{disc_amount:.2f} Fixed Portal Discount. Net Value Discount applied at order header."
+                notes_node.text = f"Includes £{disc_amount:.2f} Fixed Portal Discount. Applied as negative line item S2."
 
         items_list = list(order.items)
 
-        # 6. Items mapping (Raw un-discounted line unit prices)
+        # 6. Items mapping (Raw un-discounted line unit prices + Negative S2 discount line if present)
         sales_order_items = ET.SubElement(sales_order, "SalesOrderItems")
         
         for item in items_list:
@@ -229,6 +229,8 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             if item_name:
                 name = ET.SubElement(item_node, "Name")
                 name.text = str(item_name)
+                desc = ET.SubElement(item_node, "Description")
+                desc.text = str(item_name)
             
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
@@ -247,12 +249,53 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
             unit_disc_amt.text = "0.00"
 
+            vat_rate_val = float(getattr(item, "vat_rate", 20.0) or 0.0)
             vat_amt_val = float(getattr(item, "vat_amount", 0.0) or 0.0)
             tax_amount = ET.SubElement(item_node, "TaxAmount")
             tax_amount.text = f"{vat_amt_val:.2f}"
 
             tax_rate = ET.SubElement(item_node, "TaxRate")
-            tax_rate.text = str(getattr(item, "vat_rate", 20.0))
+            tax_rate.text = str(vat_rate_val)
+
+            tax_code = ET.SubElement(item_node, "TaxCode")
+            tax_code.text = "0" if vat_rate_val == 0.0 else "1"
+
+        # Append negative discount line item if an order discount exists
+        if disc_amount > 0:
+            disc_item_node = ET.SubElement(sales_order_items, "Item")
+
+            disc_sku = ET.SubElement(disc_item_node, "Sku")
+            disc_sku.text = "S2"
+
+            disc_label = f"Order Discount ({disc_val:g}%)" if (disc_type == "percentage" and disc_val > 0) else f"Order Discount (£{disc_amount:.2f})"
+            disc_name = ET.SubElement(disc_item_node, "Name")
+            disc_name.text = disc_label
+            disc_desc = ET.SubElement(disc_item_node, "Description")
+            disc_desc.text = disc_label
+
+            disc_qty = ET.SubElement(disc_item_node, "QtyOrdered")
+            disc_qty.text = "1"
+
+            disc_price = ET.SubElement(disc_item_node, "UnitPrice")
+            disc_price.text = f"{-disc_amount:.2f}"
+
+            disc_line_pct = ET.SubElement(disc_item_node, "DiscountPercent")
+            disc_line_pct.text = "0.00"
+            disc_line_amt = ET.SubElement(disc_item_node, "DiscountAmount")
+            disc_line_amt.text = "0.00"
+            disc_unit_pct = ET.SubElement(disc_item_node, "UnitDiscountPercentage")
+            disc_unit_pct.text = "0.00"
+            disc_unit_amt = ET.SubElement(disc_item_node, "UnitDiscountAmount")
+            disc_unit_amt.text = "0.00"
+
+            disc_tax_amt = ET.SubElement(disc_item_node, "TaxAmount")
+            disc_tax_amt.text = "0.00"
+
+            disc_tax_rate = ET.SubElement(disc_item_node, "TaxRate")
+            disc_tax_rate.text = "0.0"
+
+            disc_tax_code = ET.SubElement(disc_item_node, "TaxCode")
+            disc_tax_code.text = "0"
 
     # Return safely as a decoded UTF-8 string
     return ET.tostring(company, encoding="utf-8").decode("utf-8")

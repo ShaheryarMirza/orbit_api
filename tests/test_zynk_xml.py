@@ -95,7 +95,7 @@ def test_generate_zynk_sales_order_xml_no_discount():
 
 
 def test_generate_zynk_sales_order_xml_with_discount():
-    # User example SO-000241:
+    # User example SO-000248 / SO-000241:
     # Item 1: 2 x £6.72 = £13.44 (0% VAT = £0.00 VAT)
     # Item 2: 4 x £5.00 = £20.00 (20% VAT = £4.00 VAT)
     # Subtotal: £33.44, Discount (10%): £3.34, Final Net Total: £30.10, Total VAT: £4.00, Gross Total: £34.10
@@ -104,7 +104,7 @@ def test_generate_zynk_sales_order_xml_with_discount():
         DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 4, vat_rate=20.0, vat_amount=4.00),
     ]
     order = DummyOrder(
-        order_id=241,
+        order_id=248,
         items=items,
         discount_type="percentage",
         discount_value=10.00,
@@ -120,24 +120,36 @@ def test_generate_zynk_sales_order_xml_with_discount():
     sales_order = root.find("SalesOrders/SalesOrder")
     assert sales_order is not None
 
-    # Header discount tags: NetValueDiscount receives £3.34, NetValueDiscountPercent receives 10.00
+    # Header discount tags must be cleared to 0.00 so Sage tax recalculation engine is NOT triggered
     assert sales_order.find("DiscountPercent").text == "0.00"
     assert sales_order.find("DiscountAmount").text == "0.00"
-    assert sales_order.find("NetValueDiscountPercent").text == "10.00"
-    assert sales_order.find("NetValueDiscount").text == "3.34"
+    assert sales_order.find("NetValueDiscountPercent").text == "0.00"
+    assert sales_order.find("NetValueDiscount").text == "0.00"
 
     # Header totals must match exact portal values (£30.10 net, £4.00 VAT, £34.10 gross)
     assert sales_order.find("NetTotal").text == "30.10"
     assert sales_order.find("TaxTotal").text == "4.00"
     assert sales_order.find("GrossTotal").text == "34.10"
 
-    # Line item unit prices and TaxAmount overrides
+    # Line items: 2 normal items + 1 negative discount item (S2)
     xml_items = sales_order.findall("SalesOrderItems/Item")
-    assert len(xml_items) == 2
+    assert len(xml_items) == 3
+
+    # Line 1: Item 1
+    assert xml_items[0].find("Sku").text == "00035-03"
     assert xml_items[0].find("UnitPrice").text == "6.72"
     assert xml_items[0].find("TaxAmount").text == "0.00"
-    assert xml_items[0].find("DiscountPercent").text == "0.00"
+    assert xml_items[0].find("TaxCode").text == "0"
 
+    # Line 2: Item 2
+    assert xml_items[1].find("Sku").text == "8074"
     assert xml_items[1].find("UnitPrice").text == "5.00"
     assert xml_items[1].find("TaxAmount").text == "4.00"
-    assert xml_items[1].find("DiscountPercent").text == "0.00"
+    assert xml_items[1].find("TaxCode").text == "1"
+
+    # Line 3: Negative Discount Line Item S2
+    assert xml_items[2].find("Sku").text == "S2"
+    assert xml_items[2].find("QtyOrdered").text == "1"
+    assert xml_items[2].find("UnitPrice").text == "-3.34"
+    assert xml_items[2].find("TaxAmount").text == "0.00"
+    assert xml_items[2].find("TaxCode").text == "0"
