@@ -110,14 +110,19 @@ class OrderResponse(BaseModel):
 
     @computed_field
     @property
-    def total_price(self) -> Decimal:
+    def grand_total(self) -> Decimal:
         vat_dec = Decimal(str(round(self.total_vat, 2))) if self.total_vat is not None else Decimal("0.00")
         return (self.final_total or Decimal("0.00")) + vat_dec
 
     @computed_field
     @property
+    def total_price(self) -> Decimal:
+        return self.grand_total
+
+    @computed_field
+    @property
     def gross_total(self) -> Decimal:
-        return self.total_price
+        return self.grand_total
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,14 +165,19 @@ class SalesOrderDetailOrderResponse(BaseModel):
 
     @computed_field
     @property
-    def total_price(self) -> Decimal:
+    def grand_total(self) -> Decimal:
         vat_dec = Decimal(str(round(self.total_vat, 2))) if self.total_vat is not None else Decimal("0.00")
         return (self.final_total or Decimal("0.00")) + vat_dec
 
     @computed_field
     @property
+    def total_price(self) -> Decimal:
+        return self.grand_total
+
+    @computed_field
+    @property
     def gross_total(self) -> Decimal:
-        return self.total_price
+        return self.grand_total
 
     model_config = ConfigDict(from_attributes=True)
 
