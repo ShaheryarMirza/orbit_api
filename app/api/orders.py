@@ -421,7 +421,7 @@ def get_admin_order_summary(
     final_total = active_query.with_entities(func.coalesce(func.sum(Order.final_total), 0)).scalar()
 
     return OrderSummaryResponse(
-        total_orders=total_orders,
+        total_orders=placed_orders,
         placed_orders=placed_orders,
         cancelled_orders=cancelled_orders,
         subtotal_total=quantize_money(Decimal(subtotal_total or 0)),
