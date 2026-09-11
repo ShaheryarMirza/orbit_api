@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.models.order import DiscountType
 
@@ -108,6 +108,17 @@ class OrderResponse(BaseModel):
     salesperson: SalespersonResponse | None = None
     shop: ShopMiniResponse | None = None
 
+    @computed_field
+    @property
+    def total_price(self) -> Decimal:
+        vat_dec = Decimal(str(round(self.total_vat, 2))) if self.total_vat is not None else Decimal("0.00")
+        return (self.final_total or Decimal("0.00")) + vat_dec
+
+    @computed_field
+    @property
+    def gross_total(self) -> Decimal:
+        return self.total_price
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -146,6 +157,19 @@ class SalesOrderDetailOrderResponse(BaseModel):
     salesperson_id: int | None = None
     sage_order_number: str | None = None
     sync_notes: str | None = None
+
+    @computed_field
+    @property
+    def total_price(self) -> Decimal:
+        vat_dec = Decimal(str(round(self.total_vat, 2))) if self.total_vat is not None else Decimal("0.00")
+        return (self.final_total or Decimal("0.00")) + vat_dec
+
+    @computed_field
+    @property
+    def gross_total(self) -> Decimal:
+        return self.total_price
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SalesOrderDetailShopResponse(BaseModel):
