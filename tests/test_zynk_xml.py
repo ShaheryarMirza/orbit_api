@@ -95,13 +95,13 @@ def test_generate_zynk_sales_order_xml_no_discount():
 
 
 def test_generate_zynk_sales_order_xml_with_discount():
-    # User example SO-000248 / SO-000241:
+    # User example SO-000248 / SO-000241 with discounted line VAT:
     # Item 1: 2 x £6.72 = £13.44 (0% VAT = £0.00 VAT)
-    # Item 2: 4 x £5.00 = £20.00 (20% VAT = £4.00 VAT)
-    # Subtotal: £33.44, Discount (10%): £3.34, Final Net Total: £30.10, Total VAT: £4.00, Gross Total: £34.10
+    # Item 2: 4 x £5.00 = £20.00 -> Net after 10% disc = £18.00 (20% VAT = £3.60 VAT)
+    # Subtotal: £33.44, Discount (10%): £3.34, Final Net Total: £30.10, Total VAT: £3.60, Gross Total: £33.70
     items = [
         DummyOrderItem("00035-03", "Ulker Baby Biscuit 12x172g", 6.72, 2, vat_rate=0.0, vat_amount=0.0),
-        DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 4, vat_rate=20.0, vat_amount=4.00),
+        DummyOrderItem("8074", "Tazech Orange TP 36x200ML", 5.00, 4, vat_rate=20.0, vat_amount=3.60),
     ]
     order = DummyOrder(
         order_id=248,
@@ -111,7 +111,7 @@ def test_generate_zynk_sales_order_xml_with_discount():
         discount_amount=3.34,
         subtotal=33.44,
         final_total=30.10,
-        total_vat=4.00
+        total_vat=3.60
     )
 
     xml_str = generate_zynk_sales_order_xml([order])
@@ -126,10 +126,10 @@ def test_generate_zynk_sales_order_xml_with_discount():
     assert sales_order.find("NetValueDiscountPercent").text == "0.00"
     assert sales_order.find("NetValueDiscount").text == "0.00"
 
-    # Header totals must match exact portal values (£30.10 net, £4.00 VAT, £34.10 gross)
+    # Header totals must match exact portal values (£30.10 net, £3.60 VAT, £33.70 gross)
     assert sales_order.find("NetTotal").text == "30.10"
-    assert sales_order.find("TaxTotal").text == "4.00"
-    assert sales_order.find("GrossTotal").text == "34.10"
+    assert sales_order.find("TaxTotal").text == "3.60"
+    assert sales_order.find("GrossTotal").text == "33.70"
 
     # Line items: 2 normal items + 1 negative discount item (S2)
     xml_items = sales_order.findall("SalesOrderItems/Item")
@@ -144,7 +144,7 @@ def test_generate_zynk_sales_order_xml_with_discount():
     # Line 2: Item 2
     assert xml_items[1].find("Sku").text == "8074"
     assert xml_items[1].find("UnitPrice").text == "5.00"
-    assert xml_items[1].find("TaxAmount").text == "4.00"
+    assert xml_items[1].find("TaxAmount").text == "3.60"
     assert xml_items[1].find("TaxCode").text == "1"
 
     # Line 3: Negative Discount Line Item S2

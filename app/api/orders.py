@@ -200,6 +200,17 @@ def create_order_record(
             discount_value,
         )
         final_total = quantize_money(subtotal - discount_amount)
+
+        # Calculate line item VAT and total order VAT on discounted net line amounts (matching Assisted Order Cart)
+        subtotal_float = float(subtotal)
+        discount_float = float(discount_amount)
+        ratio = (subtotal_float - discount_float) / subtotal_float if subtotal_float > 0 else 1.0
+
+        for item in order_items:
+            line_gross = float(item.line_total)
+            line_net = line_gross * ratio
+            item.vat_amount = round(line_net * (item.vat_rate / 100.0), 2)
+
         total_vat = sum(item.vat_amount for item in order_items)
 
         order = Order(
@@ -717,7 +728,6 @@ def update_order_prices(
                     item.vat_rate = item_update.vat_rate
 
             item.line_total = quantize_money(item.unit_price * item.quantity)
-            item.vat_amount = float(item.line_total) * (item.vat_rate / 100.0)
             subtotal += item.line_total
 
         order.subtotal = quantize_money(subtotal)
@@ -737,6 +747,16 @@ def update_order_prices(
 
         order.discount_amount = discount_amount
         order.final_total = quantize_money(order.subtotal - discount_amount)
+
+        subtotal_float = float(order.subtotal)
+        discount_float = float(discount_amount)
+        ratio = (subtotal_float - discount_float) / subtotal_float if subtotal_float > 0 else 1.0
+
+        for item in order.items:
+            line_gross = float(item.line_total)
+            line_net = line_gross * ratio
+            item.vat_amount = round(line_net * (item.vat_rate / 100.0), 2)
+
         order.total_vat = sum(item.vat_amount for item in order.items)
 
         db.commit()
