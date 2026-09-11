@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.models.order import Order, OrderStatus, OrderSageSyncStatus
 from app.models.shop import Shop
 from app.models.product import Product
-from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml, generate_zynk_product_xml
+from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml, generate_zynk_product_xml, split_contact_name
 import os
 
 router = APIRouter(tags=["Sage Sync"])
@@ -255,6 +255,7 @@ def get_pending_customers_for_zynk(
         customer_list = []
         for shop in shops:
             contact_val = str(shop.contact_name or (shop.user.name if shop.user else "") or "").strip()
+            forename_val, surname_val = split_contact_name(contact_val)
             customer_list.append({
                 "Id": shop.account_ref,
                 "UniqueId": shop.account_ref,
@@ -263,6 +264,8 @@ def get_pending_customers_for_zynk(
                 "Name": shop.company_name,
                 "ContactName": contact_val,
                 "contact_name": contact_val,
+                "Forename": forename_val,
+                "Surname": surname_val,
                 "TaxCode": "1",
                 "DefaultTaxCode": "1",
                 "Address1": shop.address,
@@ -278,6 +281,10 @@ def get_pending_customers_for_zynk(
                 "Website": shop.website,
                 "VatNumber": shop.company_registration_number,
                 "CustomerInvoiceAddress": {
+                    "Title": "",
+                    "Forename": forename_val,
+                    "Surname": surname_val,
+                    "Company": shop.company_name,
                     "Address1": shop.address,
                     "Address2": shop.address_line_2,
                     "Town": shop.city,
@@ -289,6 +296,10 @@ def get_pending_customers_for_zynk(
                     "contact_name": contact_val,
                 },
                 "CustomerDeliveryAddress": {
+                    "Title": "",
+                    "Forename": forename_val,
+                    "Surname": surname_val,
+                    "Company": shop.company_name,
                     "Address1": shop.address,
                     "Address2": shop.address_line_2,
                     "Town": shop.city,
@@ -300,6 +311,7 @@ def get_pending_customers_for_zynk(
                     "contact_name": contact_val,
                 }
             })
+
         import json
         return Response(content=json.dumps({"Company": {"Customers": {"Customer": customer_list}}}), media_type="application/json")
 

@@ -4,6 +4,16 @@ from datetime import datetime
 
 from app.models.order import Order
 
+def split_contact_name(full_name: str) -> tuple[str, str]:
+    cleaned = (full_name or "").strip()
+    if not cleaned:
+        return ("", "")
+    parts = cleaned.split(maxsplit=1)
+    forename = parts[0]
+    surname = parts[1] if len(parts) > 1 else ""
+    return (forename, surname)
+
+
 def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
     """
     Takes a list of un-synced orders and generates an XML string
@@ -55,8 +65,19 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 vat_node = ET.SubElement(customer_node, "VatNumber")
                 vat_node.text = order.shop.company_registration_number
 
+            contact_val = str(order.shop.contact_name or (order.shop.user.name if order.shop.user else "") or "").strip()
+            forename_val, surname_val = split_contact_name(contact_val)
+
             # CustomerInvoiceAddress
             invoice_address = ET.SubElement(customer_node, "CustomerInvoiceAddress")
+            inv_title = ET.SubElement(invoice_address, "Title")
+            inv_title.text = ""
+            inv_forename = ET.SubElement(invoice_address, "Forename")
+            inv_forename.text = forename_val
+            inv_surname = ET.SubElement(invoice_address, "Surname")
+            inv_surname.text = surname_val
+            inv_comp = ET.SubElement(invoice_address, "Company")
+            inv_comp.text = order.shop.company_name
             inv_addr1 = ET.SubElement(invoice_address, "Address1")
             inv_addr1.text = order.shop.address
             if getattr(order.shop, "address_line_2", None):
@@ -80,12 +101,19 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
                 inv_email = ET.SubElement(invoice_address, "Email")
                 inv_email.text = order.shop.user.email
 
-            contact_val = str(order.shop.contact_name or (order.shop.user.name if order.shop.user else "") or "").strip()
             inv_contact = ET.SubElement(invoice_address, "ContactName")
             inv_contact.text = contact_val
 
             # CustomerDeliveryAddress
             delivery_address = ET.SubElement(customer_node, "CustomerDeliveryAddress")
+            del_title = ET.SubElement(delivery_address, "Title")
+            del_title.text = ""
+            del_forename = ET.SubElement(delivery_address, "Forename")
+            del_forename.text = forename_val
+            del_surname = ET.SubElement(delivery_address, "Surname")
+            del_surname.text = surname_val
+            del_comp = ET.SubElement(delivery_address, "Company")
+            del_comp.text = order.shop.company_name
             del_addr1 = ET.SubElement(delivery_address, "Address1")
             del_addr1.text = order.shop.address
             if getattr(order.shop, "address_line_2", None):
@@ -108,6 +136,7 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
 
             del_contact = ET.SubElement(delivery_address, "ContactName")
             del_contact.text = contact_val
+
 
         # 3. SalesOrderDate mapped from created_at
         sales_order_date = ET.SubElement(sales_order, "SalesOrderDate")
@@ -315,8 +344,16 @@ def generate_zynk_customer_xml(shops: List) -> str:
         name_node.text = str(shop.company_name)
 
         contact_val = str(shop.contact_name or (shop.user.name if shop.user else "") or "").strip()
+        forename_val, surname_val = split_contact_name(contact_val)
+
         contact_name = ET.SubElement(customer, "ContactName")
         contact_name.text = contact_val
+
+        forename_top = ET.SubElement(customer, "Forename")
+        forename_top.text = forename_val
+
+        surname_top = ET.SubElement(customer, "Surname")
+        surname_top.text = surname_val
 
         tax_code = ET.SubElement(customer, "TaxCode")
         tax_code.text = "1"
@@ -355,6 +392,14 @@ def generate_zynk_customer_xml(shops: List) -> str:
 
         # CustomerInvoiceAddress
         invoice_address = ET.SubElement(customer, "CustomerInvoiceAddress")
+        inv_title = ET.SubElement(invoice_address, "Title")
+        inv_title.text = ""
+        inv_forename = ET.SubElement(invoice_address, "Forename")
+        inv_forename.text = forename_val
+        inv_surname = ET.SubElement(invoice_address, "Surname")
+        inv_surname.text = surname_val
+        inv_comp = ET.SubElement(invoice_address, "Company")
+        inv_comp.text = str(shop.company_name)
         inv_addr1 = ET.SubElement(invoice_address, "Address1")
         inv_addr1.text = str(shop.address)
         if shop.address_line_2:
@@ -382,6 +427,14 @@ def generate_zynk_customer_xml(shops: List) -> str:
 
         # CustomerDeliveryAddress
         delivery_address = ET.SubElement(customer, "CustomerDeliveryAddress")
+        del_title = ET.SubElement(delivery_address, "Title")
+        del_title.text = ""
+        del_forename = ET.SubElement(delivery_address, "Forename")
+        del_forename.text = forename_val
+        del_surname = ET.SubElement(delivery_address, "Surname")
+        del_surname.text = surname_val
+        del_comp = ET.SubElement(delivery_address, "Company")
+        del_comp.text = str(shop.company_name)
         del_addr1 = ET.SubElement(delivery_address, "Address1")
         del_addr1.text = str(shop.address)
         if shop.address_line_2:

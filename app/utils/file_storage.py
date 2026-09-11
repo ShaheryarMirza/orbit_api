@@ -20,6 +20,8 @@ SUPABASE_KEY = (
 SUPABASE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET") or "products"
 
 
+
+
 def save_upload_file(upload_file: UploadFile, folder_name: str) -> str:
     """
     Saves an uploaded file to Supabase Cloud Storage returning a permanent Public URL,
