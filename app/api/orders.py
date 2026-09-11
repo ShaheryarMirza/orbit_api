@@ -418,7 +418,9 @@ def get_admin_order_summary(
     discount_total = active_query.with_entities(
         func.coalesce(func.sum(Order.discount_amount), 0)
     ).scalar()
-    final_total = active_query.with_entities(func.coalesce(func.sum(Order.final_total), 0)).scalar()
+    final_total = active_query.with_entities(
+        func.coalesce(func.sum(Order.final_total + func.coalesce(Order.total_vat, 0)), 0)
+    ).scalar()
 
     return OrderSummaryResponse(
         total_orders=placed_orders,
