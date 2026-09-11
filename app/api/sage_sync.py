@@ -68,39 +68,35 @@ def get_pending_orders_for_zynk(
             disc_val = float(getattr(order, "discount_value", 0) or 0)
             subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
+            line_disc_pct_val = 0.0
+            if disc_amount > 0 and subtotal_val > 0:
+                if disc_type == "percentage" and disc_val > 0:
+                    line_disc_pct_val = disc_val
+                else:
+                    line_disc_pct_val = (disc_amount / subtotal_val) * 100.0
+
             items_list = []
             for item in order.items:
                 raw_unit_price = float(item.unit_price)
+                if line_disc_pct_val > 0:
+                    item_disc_pct_str = f"{line_disc_pct_val:.2f}"
+                    item_disc_amt_str = f"{raw_unit_price * (line_disc_pct_val / 100.0):.2f}"
+                else:
+                    item_disc_pct_str = "0.00"
+                    item_disc_amt_str = "0.00"
 
                 items_list.append({
                     "Sku": item.product_code,
                     "Name": item.product_name,
                     "QtyOrdered": item.quantity,
                     "UnitPrice": f"{raw_unit_price:.2f}",
-                    "DiscountPercent": "0.00",
-                    "DiscountAmount": "0.00",
-                    "UnitDiscountPercentage": "0.00",
-                    "UnitDiscountAmount": "0.00",
+                    "DiscountPercent": item_disc_pct_str,
+                    "DiscountAmount": item_disc_amt_str,
+                    "UnitDiscountPercentage": item_disc_pct_str,
+                    "UnitDiscountAmount": item_disc_amt_str,
                     "TaxAmount": f"{float(getattr(item, 'vat_amount', 0.0) or 0.0):.2f}",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                     "TaxCode": "0" if float(getattr(item, "vat_rate", 20.0) or 0) == 0.0 else "1",
-                })
-
-            if disc_amount > 0:
-                disc_label = f"Order Discount ({disc_val:g}%)" if (disc_type == "percentage" and disc_val > 0) else f"Order Discount (£{disc_amount:.2f})"
-                items_list.append({
-                    "Sku": "S2",
-                    "Name": disc_label,
-                    "Description": disc_label,
-                    "QtyOrdered": 1,
-                    "UnitPrice": f"{-disc_amount:.2f}",
-                    "DiscountPercent": "0.00",
-                    "DiscountAmount": "0.00",
-                    "UnitDiscountPercentage": "0.00",
-                    "UnitDiscountAmount": "0.00",
-                    "TaxAmount": "0.00",
-                    "TaxRate": "0.0",
-                    "TaxCode": "0",
                 })
 
             net_total_val = float(getattr(order, "final_total", 0) or 0)

@@ -131,25 +131,22 @@ def test_generate_zynk_sales_order_xml_with_discount():
     assert sales_order.find("TaxTotal").text == "3.60"
     assert sales_order.find("GrossTotal").text == "33.70"
 
-    # Line items: 2 normal items + 1 negative discount item (S2)
+    # Line items: 2 normal items with 10% unit discounts
     xml_items = sales_order.findall("SalesOrderItems/Item")
-    assert len(xml_items) == 3
+    assert len(xml_items) == 2
 
     # Line 1: Item 1
     assert xml_items[0].find("Sku").text == "00035-03"
     assert xml_items[0].find("UnitPrice").text == "6.72"
+    assert xml_items[0].find("UnitDiscountPercentage").text == "10.00"
+    assert xml_items[0].find("UnitDiscountAmount").text == "0.67"
     assert xml_items[0].find("TaxAmount").text == "0.00"
     assert xml_items[0].find("TaxCode").text == "0"
 
     # Line 2: Item 2
     assert xml_items[1].find("Sku").text == "8074"
     assert xml_items[1].find("UnitPrice").text == "5.00"
+    assert xml_items[1].find("UnitDiscountPercentage").text == "10.00"
+    assert xml_items[1].find("UnitDiscountAmount").text == "0.50"
     assert xml_items[1].find("TaxAmount").text == "3.60"
     assert xml_items[1].find("TaxCode").text == "1"
-
-    # Line 3: Negative Discount Line Item S2
-    assert xml_items[2].find("Sku").text == "S2"
-    assert xml_items[2].find("QtyOrdered").text == "1"
-    assert xml_items[2].find("UnitPrice").text == "-3.34"
-    assert xml_items[2].find("TaxAmount").text == "0.00"
-    assert xml_items[2].find("TaxCode").text == "0"
