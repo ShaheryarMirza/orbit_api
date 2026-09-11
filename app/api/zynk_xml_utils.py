@@ -168,16 +168,34 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
         disc_val = float(getattr(order, "discount_value", 0) or 0)
         subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
-        # Header-level discount nodes explicitly set to 0.00 to prevent Sage tax engine recalculation
+        # Header-level discount nodes
+        if disc_amount > 0 or disc_val > 0:
+            if disc_type == "percentage" and disc_val > 0:
+                disc_pct_str = f"{disc_val:.2f}"
+                disc_amt_str = f"{disc_amount:.2f}"
+                disc_desc_str = f"Order Discount ({disc_val:g}%)"
+            else:
+                disc_pct_str = f"{(disc_amount / subtotal_val * 100.0):.2f}" if subtotal_val > 0 else "0.00"
+                disc_amt_str = f"{disc_amount:.2f}"
+                disc_desc_str = f"Order Discount (£{disc_amount:.2f})"
+        else:
+            disc_pct_str = "0.00"
+            disc_amt_str = "0.00"
+            disc_desc_str = ""
+
         hdr_disc_pct = ET.SubElement(sales_order, "DiscountPercent")
-        hdr_disc_pct.text = "0.00"
+        hdr_disc_pct.text = disc_pct_str
         hdr_disc_amt = ET.SubElement(sales_order, "DiscountAmount")
-        hdr_disc_amt.text = "0.00"
+        hdr_disc_amt.text = disc_amt_str
 
         disc_pct = ET.SubElement(sales_order, "NetValueDiscountPercent")
-        disc_pct.text = "0.00"
+        disc_pct.text = disc_pct_str
         disc_net = ET.SubElement(sales_order, "NetValueDiscount")
-        disc_net.text = "0.00"
+        disc_net.text = disc_amt_str
+
+        if disc_desc_str:
+            disc_desc = ET.SubElement(sales_order, "NetValueDiscountDescription")
+            disc_desc.text = disc_desc_str
 
         # Explicitly pass exact portal-calculated values for NetTotal, TaxTotal, and GrossTotal
         net_total_val = float(getattr(order, "final_total", 0) or 0)
@@ -209,17 +227,9 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             else:
                 notes_node.text = f"Includes £{disc_amount:.2f} Fixed Portal Discount."
 
-        # Line discount percentage calculation for items
-        line_disc_pct_val = 0.0
-        if disc_amount > 0 and subtotal_val > 0:
-            if disc_type == "percentage" and disc_val > 0:
-                line_disc_pct_val = disc_val
-            else:
-                line_disc_pct_val = (disc_amount / subtotal_val) * 100.0
-
         items_list = list(order.items)
 
-        # 6. Items mapping with line-level discounts
+        # 6. Items mapping (full un-discounted catalog line unit prices)
         sales_order_items = ET.SubElement(sales_order, "SalesOrderItems")
         
         for item in items_list:
@@ -247,22 +257,15 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
             unit_price = ET.SubElement(item_node, "UnitPrice")
             unit_price.text = f"{raw_unit_price:.2f}"
 
-            # Line-level discount tags
-            if line_disc_pct_val > 0:
-                item_disc_pct_str = f"{line_disc_pct_val:.2f}"
-                item_disc_amt_str = f"{raw_unit_price * (line_disc_pct_val / 100.0):.2f}"
-            else:
-                item_disc_pct_str = "0.00"
-                item_disc_amt_str = "0.00"
-
+            # Line-level discount tags set to 0.00 since discount is applied at header NetValueDiscount
             line_disc_pct = ET.SubElement(item_node, "DiscountPercent")
-            line_disc_pct.text = item_disc_pct_str
+            line_disc_pct.text = "0.00"
             line_disc_amt = ET.SubElement(item_node, "DiscountAmount")
-            line_disc_amt.text = item_disc_amt_str
+            line_disc_amt.text = "0.00"
             unit_disc_pct = ET.SubElement(item_node, "UnitDiscountPercentage")
-            unit_disc_pct.text = item_disc_pct_str
+            unit_disc_pct.text = "0.00"
             unit_disc_amt = ET.SubElement(item_node, "UnitDiscountAmount")
-            unit_disc_amt.text = item_disc_amt_str
+            unit_disc_amt.text = "0.00"
 
             vat_rate_val = float(getattr(item, "vat_rate", 20.0) or 0.0)
             vat_amt_val = float(getattr(item, "vat_amount", 0.0) or 0.0)

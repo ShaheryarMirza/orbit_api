@@ -68,32 +68,33 @@ def get_pending_orders_for_zynk(
             disc_val = float(getattr(order, "discount_value", 0) or 0)
             subtotal_val = float(getattr(order, "subtotal", 0) or 0)
 
-            line_disc_pct_val = 0.0
-            if disc_amount > 0 and subtotal_val > 0:
+            if disc_amount > 0 or disc_val > 0:
                 if disc_type == "percentage" and disc_val > 0:
-                    line_disc_pct_val = disc_val
+                    disc_pct_str = f"{disc_val:.2f}"
+                    disc_amt_str = f"{disc_amount:.2f}"
+                    disc_desc_str = f"Order Discount ({disc_val:g}%)"
                 else:
-                    line_disc_pct_val = (disc_amount / subtotal_val) * 100.0
+                    disc_pct_str = f"{(disc_amount / subtotal_val * 100.0):.2f}" if subtotal_val > 0 else "0.00"
+                    disc_amt_str = f"{disc_amount:.2f}"
+                    disc_desc_str = f"Order Discount (£{disc_amount:.2f})"
+            else:
+                disc_pct_str = "0.00"
+                disc_amt_str = "0.00"
+                disc_desc_str = ""
 
             items_list = []
             for item in order.items:
                 raw_unit_price = float(item.unit_price)
-                if line_disc_pct_val > 0:
-                    item_disc_pct_str = f"{line_disc_pct_val:.2f}"
-                    item_disc_amt_str = f"{raw_unit_price * (line_disc_pct_val / 100.0):.2f}"
-                else:
-                    item_disc_pct_str = "0.00"
-                    item_disc_amt_str = "0.00"
 
                 items_list.append({
                     "Sku": item.product_code,
                     "Name": item.product_name,
                     "QtyOrdered": item.quantity,
                     "UnitPrice": f"{raw_unit_price:.2f}",
-                    "DiscountPercent": item_disc_pct_str,
-                    "DiscountAmount": item_disc_amt_str,
-                    "UnitDiscountPercentage": item_disc_pct_str,
-                    "UnitDiscountAmount": item_disc_amt_str,
+                    "DiscountPercent": "0.00",
+                    "DiscountAmount": "0.00",
+                    "UnitDiscountPercentage": "0.00",
+                    "UnitDiscountAmount": "0.00",
                     "TaxAmount": f"{float(getattr(item, 'vat_amount', 0.0) or 0.0):.2f}",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                     "TaxCode": "0" if float(getattr(item, "vat_rate", 20.0) or 0) == 0.0 else "1",
@@ -107,10 +108,10 @@ def get_pending_orders_for_zynk(
                 "Id": str(order.id),
                 "AccountReference": str(account_ref_val),
                 "SalesOrderDate": order.created_at.strftime("%Y-%m-%dT%H:%M:%S") if order.created_at else None,
-                "DiscountPercent": "0.00",
-                "DiscountAmount": "0.00",
-                "NetValueDiscountPercent": "0.00",
-                "NetValueDiscount": "0.00",
+                "DiscountPercent": disc_pct_str,
+                "DiscountAmount": disc_amt_str,
+                "NetValueDiscountPercent": disc_pct_str,
+                "NetValueDiscount": disc_amt_str,
                 "NetTotal": f"{net_total_val:.2f}",
                 "TaxTotal": f"{tax_total_val:.2f}",
                 "GrossTotal": f"{gross_total_val:.2f}",
@@ -119,8 +120,10 @@ def get_pending_orders_for_zynk(
                 "BypassCustomerDiscounts": "true",
                 "SalesOrderItems": {"Item": items_list},
             }
+            if disc_desc_str:
+                order_data["NetValueDiscountDescription"] = disc_desc_str
             if disc_amount > 0 or disc_val > 0:
-                order_data["Notes"] = f"Includes portal discount. Line item unit prices are net of discount."
+                order_data["Notes"] = f"Includes portal discount."
 
             sales_orders_list.append(order_data)
 

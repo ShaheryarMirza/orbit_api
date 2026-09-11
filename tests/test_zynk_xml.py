@@ -120,33 +120,34 @@ def test_generate_zynk_sales_order_xml_with_discount():
     sales_order = root.find("SalesOrders/SalesOrder")
     assert sales_order is not None
 
-    # Header discount tags must be cleared to 0.00 so Sage tax recalculation engine is NOT triggered
-    assert sales_order.find("DiscountPercent").text == "0.00"
-    assert sales_order.find("DiscountAmount").text == "0.00"
-    assert sales_order.find("NetValueDiscountPercent").text == "0.00"
-    assert sales_order.find("NetValueDiscount").text == "0.00"
+    # Header discount tags passed as order-level header discount
+    assert sales_order.find("DiscountPercent").text == "10.00"
+    assert sales_order.find("DiscountAmount").text == "3.34"
+    assert sales_order.find("NetValueDiscountPercent").text == "10.00"
+    assert sales_order.find("NetValueDiscount").text == "3.34"
+    assert sales_order.find("NetValueDiscountDescription").text == "Order Discount (10%)"
 
     # Header totals must match exact portal values (£30.10 net, £3.60 VAT, £33.70 gross)
     assert sales_order.find("NetTotal").text == "30.10"
     assert sales_order.find("TaxTotal").text == "3.60"
     assert sales_order.find("GrossTotal").text == "33.70"
 
-    # Line items: 2 normal items with 10% unit discounts
+    # Line items: 2 normal items with full catalog prices and 0.00 line discounts
     xml_items = sales_order.findall("SalesOrderItems/Item")
     assert len(xml_items) == 2
 
     # Line 1: Item 1
     assert xml_items[0].find("Sku").text == "00035-03"
     assert xml_items[0].find("UnitPrice").text == "6.72"
-    assert xml_items[0].find("UnitDiscountPercentage").text == "10.00"
-    assert xml_items[0].find("UnitDiscountAmount").text == "0.67"
+    assert xml_items[0].find("UnitDiscountPercentage").text == "0.00"
+    assert xml_items[0].find("UnitDiscountAmount").text == "0.00"
     assert xml_items[0].find("TaxAmount").text == "0.00"
     assert xml_items[0].find("TaxCode").text == "0"
 
     # Line 2: Item 2
     assert xml_items[1].find("Sku").text == "8074"
     assert xml_items[1].find("UnitPrice").text == "5.00"
-    assert xml_items[1].find("UnitDiscountPercentage").text == "10.00"
-    assert xml_items[1].find("UnitDiscountAmount").text == "0.50"
+    assert xml_items[1].find("UnitDiscountPercentage").text == "0.00"
+    assert xml_items[1].find("UnitDiscountAmount").text == "0.00"
     assert xml_items[1].find("TaxAmount").text == "3.60"
     assert xml_items[1].find("TaxCode").text == "1"
