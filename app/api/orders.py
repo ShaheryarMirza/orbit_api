@@ -6,7 +6,7 @@ from io import StringIO, BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, cast, String
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.dependencies import get_current_user, require_roles
@@ -374,13 +374,16 @@ def apply_order_list_filters(
     sage_sync_status_filter = validate_sage_sync_status_filter(sage_sync_status)
     if search:
         search_pattern = f"%{search.strip()}%"
-        query = query.join(Shop).filter(
+        query = query.join(Order.shop, isouter=True).filter(
             or_(
                 Order.order_number.ilike(search_pattern),
                 Order.customer_reference.ilike(search_pattern),
+                Order.account_ref.ilike(search_pattern),
+                cast(Order.id, String).ilike(search_pattern),
                 Shop.company_name.ilike(search_pattern),
                 Shop.postcode.ilike(search_pattern),
                 Shop.city.ilike(search_pattern),
+                Shop.account_ref.ilike(search_pattern),
             )
         )
     if status_filter is not None:
@@ -788,7 +791,7 @@ def list_orders(
     date_from: date | None = None,
     date_to: date | None = None,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=50, ge=1, le=1000),
 ) -> OrderListResponse:
     query = apply_order_list_filters(
         db.query(Order).options(
