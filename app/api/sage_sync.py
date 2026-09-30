@@ -146,7 +146,11 @@ async def update_sage_order_statuses(
     except ET.ParseError:
         raise HTTPException(status_code=400, detail="Invalid XML payload")
 
-    for sales_order in root.iter("SalesOrder"):
+    sales_orders = list(root.iter("SalesOrder"))
+    if not sales_orders:
+        sales_orders = [el for el in root.iter() if el.find("Id") is not None]
+
+    for sales_order in sales_orders:
         order_id_node = sales_order.find("Id")
         if order_id_node is None or not order_id_node.text:
             continue
@@ -156,12 +160,20 @@ async def update_sage_order_statuses(
         except ValueError:
             continue
             
-        sales_order_number_node = sales_order.find("SalesOrderNumber")
-        account_reference_node = sales_order.find("AccountReference")
+        sales_order_number_node = (
+            sales_order.find("SalesOrderNumber")
+            or sales_order.find("SageOrderNumber")
+            or sales_order.find("OrderNumber")
+        )
+        account_reference_node = (
+            sales_order.find("AccountReference")
+            or sales_order.find("AccountRef")
+        )
         
         order = db.query(Order).filter(Order.id == order_id).first()
         if order:
             order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
+            order.sync_notes = None
             
             if sales_order_number_node is not None and sales_order_number_node.text:
                 order.sage_order_number = sales_order_number_node.text
@@ -203,7 +215,32 @@ async def record_sage_order_failures(
         except ValueError:
             continue
 
-        # Extract failure explanation
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            continue
+
+        # Protect orders that are already marked SYNCED or have a Sage Order Number
+        if order.sage_sync_status == OrderSageSyncStatus.SYNCED.value or order.sage_order_number:
+            continue
+
+        # Check if the item XML node itself actually indicates success
+        sales_order_number_node = (
+            item.find("SalesOrderNumber")
+            or item.find("SageOrderNumber")
+            or item.find("OrderNumber")
+        )
+        status_node = item.find("Status")
+        if (
+            (status_node is not None and status_node.text and status_node.text.lower() in ("success", "synced", "ok"))
+            or (sales_order_number_node is not None and sales_order_number_node.text)
+        ):
+            order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
+            if sales_order_number_node is not None and sales_order_number_node.text:
+                order.sage_order_number = sales_order_number_node.text
+            order.sync_notes = None
+            continue
+
+        # Extract failure explanation if any
         error_msg = ""
         msg_node = item.find("Message")
         err_node = item.find("Error")
@@ -215,10 +252,8 @@ async def record_sage_order_failures(
         else:
             error_msg = "Sync failed during Zynk Workflow execution."
 
-        order = db.query(Order).filter(Order.id == order_id).first()
-        if order:
-            order.sage_sync_status = OrderSageSyncStatus.FAILED.value
-            order.sync_notes = error_msg
+        order.sage_sync_status = OrderSageSyncStatus.FAILED.value
+        order.sync_notes = error_msg
 
     db.commit()
     return {"status": "recorded", "message": "Failure notes captured"}
