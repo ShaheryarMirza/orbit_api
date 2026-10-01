@@ -5,19 +5,23 @@ import urllib.request
 import urllib.error
 
 from fastapi import UploadFile
+from app.core.config import settings
 
 SUPABASE_URL = (
-    os.getenv("SUPABASE_URL")
+    settings.SUPABASE_URL
+    or os.getenv("SUPABASE_URL")
     or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
     or "https://iqwpwawpmndewyxmvpju.supabase.co"
 )
 SUPABASE_KEY = (
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    settings.SUPABASE_SERVICE_ROLE_KEY
+    or settings.SUPABASE_ANON_KEY
+    or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     or os.getenv("SUPABASE_ANON_KEY")
     or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     or ""
 )
-SUPABASE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET") or "products"
+SUPABASE_BUCKET = settings.SUPABASE_STORAGE_BUCKET or os.getenv("SUPABASE_STORAGE_BUCKET") or "products"
 
 
 

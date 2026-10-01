@@ -42,6 +42,21 @@ def clean_required_text(value: str, field_name: str) -> str:
     return cleaned
 
 
+def normalize_product_image_url(url: str | None) -> str | None:
+    if not url or not url.strip():
+        return None
+    clean_url = url.strip()
+    if clean_url.lower() in ("none", "null", "nan", "undefined", ""):
+        return None
+    if clean_url.startswith("http://") or clean_url.startswith("https://"):
+        return clean_url
+    
+    filename = clean_url.split("/")[-1]
+    if filename:
+        return f"https://iqwpwawpmndewyxmvpju.supabase.co/storage/v1/object/public/products/{filename}"
+    return clean_url
+
+
 def get_active_subcategory_or_404(subcategory_id: int, db: Session) -> SubCategory:
     subcategory = (
         db.query(SubCategory)
@@ -536,7 +551,7 @@ def upload_product_image(
 ) -> Product:
     product = get_product_or_404(product_id, db, active_only=False)
     file_url = save_upload_file(file, "products")
-    product.image_url = file_url
+    product.image_url = normalize_product_image_url(file_url)
     db.commit()
     db.refresh(product)
     return product
@@ -687,7 +702,7 @@ async def import_products(
                     product.category_id = category_id
                 # Only update image_url if a valid non-empty string is provided; preserve existing image_url otherwise
                 if image_val:
-                    product.image_url = image_val
+                    product.image_url = normalize_product_image_url(image_val)
                 db.flush()
                 created += 1
             else:
@@ -698,7 +713,7 @@ async def import_products(
                     price=price_val,
                     vat_rate=vat_val,
                     category_id=category_id,
-                    image_url=image_val,
+                    image_url=normalize_product_image_url(image_val),
                     is_active=True,
                     quantity=0
                 )

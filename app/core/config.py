@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    SUPABASE_URL: str = "https://iqwpwawpmndewyxmvpju.supabase.co"
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "products"
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
