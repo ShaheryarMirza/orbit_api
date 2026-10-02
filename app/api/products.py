@@ -494,6 +494,8 @@ def update_product(
 
     if "description" in payload.model_fields_set:
         product.description = payload.description.strip() if payload.description else None
+    if "image_url" in payload.model_fields_set:
+        product.image_url = normalize_product_image_url(payload.image_url)
     if payload.price is not None:
         product.price = payload.price
     if payload.vat_rate is not None:
@@ -552,6 +554,24 @@ def upload_product_image(
     product = get_product_or_404(product_id, db, active_only=False)
     file_url = save_upload_file(file, "products")
     product.image_url = normalize_product_image_url(file_url)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.delete(
+    "/{product_id}/image",
+    response_model=ProductResponse,
+    summary="Remove product image",
+    description="Admin-only endpoint for removing a product image.",
+)
+def remove_product_image(
+    product_id: int,
+    current_user: User = Depends(admin_role),
+    db: Session = Depends(get_db),
+) -> Product:
+    product = get_product_or_404(product_id, db, active_only=False)
+    product.image_url = None
     db.commit()
     db.refresh(product)
     return product

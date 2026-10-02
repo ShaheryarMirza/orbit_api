@@ -21,6 +21,7 @@ class ProductUpdate(BaseModel):
     product_code: str | None = Field(default=None, min_length=1, max_length=100)
     product_name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = None
     price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     vat_rate: float | None = Field(default=None, ge=0)
     quantity: int | None = Field(default=None, ge=0)
