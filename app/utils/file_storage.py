@@ -45,7 +45,7 @@ def save_upload_file(upload_file: UploadFile, folder_name: str) -> str:
     # Attempt direct upload to Supabase Storage bucket (permanent Public URL)
     bucket = SUPABASE_BUCKET
     supabase_url_clean = SUPABASE_URL.rstrip("/")
-    object_path = f"{folder_name}/{unique_filename}"
+    object_path = unique_filename if folder_name == "products" else f"{folder_name}/{unique_filename}"
     upload_endpoint = f"{supabase_url_clean}/storage/v1/object/{bucket}/{object_path}"
 
     if SUPABASE_KEY and not SUPABASE_KEY.endswith("placeholder"):
