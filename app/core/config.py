@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     DATABASE_PASSWORD: str = "your_postgres_password_here"
     JWT_SECRET_KEY: str = "change-this-secret-key"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 90
+    REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
+    COOKIE_SECURE: bool = False
 
     SUPABASE_URL: str = "https://iqwpwawpmndewyxmvpju.supabase.co"
     SUPABASE_SERVICE_ROLE_KEY: str | None = None

@@ -1,20 +1,33 @@
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from jose import JWTError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.models.shop import Shop, ShopApprovalStatus, SageSyncStatus
 from app.models.password_reset_request import PasswordResetRequest
-from app.schemas.auth import LoginRequest, MeResponse, SignupRequest, TokenResponse, RegisterRequest, ChangePasswordRequest
+from app.schemas.auth import (
+    LoginRequest,
+    MeResponse,
+    RefreshTokenRequest,
+    SignupRequest,
+    TokenResponse,
+    RegisterRequest,
+    ChangePasswordRequest,
+)
 from app.schemas.password_request import PasswordResetRequestCreate, PasswordResetRequestResponse
 from app.utils.security import (
     create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
     hash_password,
     verify_password,
 )
+
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -164,7 +177,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(
+    payload: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
     identifier = payload.email.strip()
     
     # Lookup user by email OR shop phone_number OR shop account_ref
@@ -182,7 +199,84 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path="/",
+    )
+
     return TokenResponse(access_token=access_token)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(
+    response: Response,
+    db: Session = Depends(get_db),
+    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_TOKEN_COOKIE_NAME),
+    payload: RefreshTokenRequest | None = None,
+) -> TokenResponse:
+    token = refresh_token or (payload.refresh_token if payload else None)
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing",
+        )
+
+    try:
+        decoded = decode_refresh_token(token)
+        user_id = decoded.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+    except (JWTError, Exception) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        ) from exc
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+
+    new_access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=new_refresh_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path="/",
+    )
+
+    return TokenResponse(access_token=new_access_token)
+
+
+@router.post("/logout")
+def logout(response: Response) -> dict[str, str]:
+    response.delete_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+    )
+    return {"detail": "Logged out successfully"}
+
 
 
 @router.get("/me", response_model=MeResponse)
