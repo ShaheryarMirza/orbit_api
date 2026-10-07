@@ -86,9 +86,9 @@ def get_pending_orders_for_zynk(
             for item in order.items:
                 raw_unit_price = float(item.unit_price)
 
-                items_list.append({
-                    "Sku": item.product_code,
-                    "Name": item.product_name,
+                sku_val = (item.product_code or "").strip() if getattr(item, "product_code", None) else ""
+                item_dict = {
+                    "Sku": sku_val,
                     "QtyOrdered": item.quantity,
                     "UnitPrice": f"{raw_unit_price:.2f}",
                     "DiscountPercent": "0.00",
@@ -98,7 +98,13 @@ def get_pending_orders_for_zynk(
                     "TaxAmount": f"{float(getattr(item, 'vat_amount', 0.0) or 0.0):.2f}",
                     "TaxRate": getattr(item, "vat_rate", 20.0),
                     "TaxCode": "0" if float(getattr(item, "vat_rate", 20.0) or 0) == 0.0 else "1",
-                })
+                }
+                # Sage 50 automatically fetches description from SKU; only include Name if Sku is missing/empty
+                if not sku_val:
+                    item_dict["Name"] = item.product_name
+
+                items_list.append(item_dict)
+
 
             net_total_val = float(getattr(order, "final_total", 0) or 0)
             tax_total_val = float(getattr(order, "total_vat", 0) or 0)

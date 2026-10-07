@@ -87,11 +87,15 @@ def test_generate_zynk_sales_order_xml_no_discount():
     # Line item tags
     item = sales_order.find("SalesOrderItems/Item")
     assert item is not None
+    assert item.find("Sku").text == "PROD01"
+    assert item.find("Name") is None
+    assert item.find("Description") is None
     assert item.find("UnitPrice").text == "50.00"
     assert item.find("DiscountPercent").text == "0.00"
     assert item.find("DiscountAmount").text == "0.00"
     assert item.find("UnitDiscountPercentage").text == "0.00"
     assert item.find("UnitDiscountAmount").text == "0.00"
+
 
 
 def test_generate_zynk_sales_order_xml_with_discount():
@@ -146,8 +150,31 @@ def test_generate_zynk_sales_order_xml_with_discount():
 
     # Line 2: Item 2
     assert xml_items[1].find("Sku").text == "8074"
+    assert xml_items[1].find("Name") is None
+    assert xml_items[1].find("Description") is None
     assert xml_items[1].find("UnitPrice").text == "5.00"
     assert xml_items[1].find("UnitDiscountPercentage").text == "0.00"
     assert xml_items[1].find("UnitDiscountAmount").text == "0.00"
     assert xml_items[1].find("TaxAmount").text == "3.60"
     assert xml_items[1].find("TaxCode").text == "1"
+
+
+def test_generate_zynk_sales_order_xml_service_item_without_sku():
+    items = [
+        DummyOrderItem("", "Delivery Service Fee", 15.00, 1, vat_rate=20.0, vat_amount=3.0)
+    ]
+    order = DummyOrder(
+        order_id=102,
+        items=items,
+        subtotal=15.00,
+        final_total=15.00,
+        total_vat=3.00
+    )
+    xml_str = generate_zynk_sales_order_xml([order])
+    root = ET.fromstring(xml_str)
+    item = root.find("SalesOrders/SalesOrder/SalesOrderItems/Item")
+    assert item is not None
+    assert (item.find("Sku").text or "") == ""
+    assert item.find("Name") is not None and item.find("Name").text == "Delivery Service Fee"
+    assert item.find("Description") is not None and item.find("Description").text == "Delivery Service Fee"
+

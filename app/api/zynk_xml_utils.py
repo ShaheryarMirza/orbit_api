@@ -264,20 +264,27 @@ def generate_zynk_sales_order_xml(orders: List[Order]) -> str:
         for item in items_list:
             item_node = ET.SubElement(sales_order_items, "Item")
             
-            sku = ET.SubElement(item_node, "Sku")
             sku_code = item.product_code
             if getattr(item, "product", None) and getattr(item.product, "product_code", None):
                 sku_code = item.product.product_code
-            sku.text = str(sku_code)
+            sku_val = str(sku_code or "").strip()
 
-            item_name = getattr(item, "product_name", None)
-            if getattr(item, "product", None) and getattr(item.product, "product_name", None):
-                item_name = item.product.product_name
-            if item_name:
-                name = ET.SubElement(item_node, "Name")
-                name.text = str(item_name)
-                desc = ET.SubElement(item_node, "Description")
-                desc.text = str(item_name)
+            sku = ET.SubElement(item_node, "Sku")
+            sku.text = sku_val
+
+            # Sage 50 automatically fetches primary product description from inventory using Sku.
+            # Passing Name/Description causes Sage 50 to append extra comment text, printing descriptions twice.
+            # Append <Name> and <Description> ONLY when Sku is absent or empty (non-stock/service items).
+            if not sku_val:
+                item_name = getattr(item, "product_name", None)
+                if getattr(item, "product", None) and getattr(item.product, "product_name", None):
+                    item_name = item.product.product_name
+                if item_name:
+                    name = ET.SubElement(item_node, "Name")
+                    name.text = str(item_name)
+                    desc = ET.SubElement(item_node, "Description")
+                    desc.text = str(item_name)
+
             
             qty_ordered = ET.SubElement(item_node, "QtyOrdered")
             qty_ordered.text = str(item.quantity)
