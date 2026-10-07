@@ -24,21 +24,26 @@ app = FastAPI(title="B2B Sage Ordering App API")
 
 # Configure CORS
 origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-    "https://localhost:3000",
     "https://orbitfood.net",
     "https://www.orbitfood.net",
     "http://orbitfood.net",
     "http://www.orbitfood.net",
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "https://localhost:3000",
 ]
 
-# Allow additional origins from environment variable if configured
+# Allow additional origins from environment variable if configured, filtering out wildcard '*'
 custom_cors = os.environ.get("CORS_ORIGINS")
 if custom_cors:
-    origins.extend([origin.strip() for origin in custom_cors.split(",") if origin.strip()])
+    origins.extend([origin.strip() for origin in custom_cors.split(",") if origin.strip() and origin.strip() != "*"])
+
+# Ensure distinct list and NEVER contain wildcard '*' when allow_credentials=True
+origins = list(dict.fromkeys([o for o in origins if o != "*"]))
 
 app.add_middleware(
     CORSMiddleware,

@@ -42,13 +42,20 @@ def normalize_email(email: str) -> str:
 def is_secure_cookie(request: Request) -> bool:
     if settings.COOKIE_SECURE:
         return True
+    host = request.headers.get("host", "").lower()
+    origin = request.headers.get("origin", "").lower()
+    referer = request.headers.get("referer", "").lower()
     proto = request.headers.get("x-forwarded-proto", "").lower()
+
+    # Strictly HTTPS for orbitfood.net
+    if "orbitfood.net" in host or "orbitfood.net" in origin or "orbitfood.net" in referer:
+        return True
     if proto == "https" or request.url.scheme == "https":
         return True
-    origin = request.headers.get("origin", "").lower()
-    if origin.startswith("https://"):
-        return True
+
+    # Otherwise False for HTTP / localhost
     return False
+
 
 
 
@@ -227,7 +234,7 @@ def login(
         path="/",
     )
 
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(access_token=access_token, token_type="bearer")
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -243,8 +250,16 @@ def refresh_token(
     token = refresh_token
     if not token and settings.REFRESH_TOKEN_COOKIE_NAME in request.cookies:
         token = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if not token and "cookie" in request.headers:
+        cookie_header = request.headers.get("cookie", "")
+        for part in cookie_header.split(";"):
+            part = part.strip()
+            if part.startswith(f"{settings.REFRESH_TOKEN_COOKIE_NAME}="):
+                token = part.split("=", 1)[1].strip()
+                break
     if not token and payload and payload.refresh_token:
         token = payload.refresh_token
+
 
     if not token:
         raise HTTPException(
@@ -296,7 +311,7 @@ def refresh_token(
         path="/",
     )
 
-    return TokenResponse(access_token=new_access_token)
+    return TokenResponse(access_token=new_access_token, token_type="bearer")
 
 
 @router.post("/logout")
