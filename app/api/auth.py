@@ -1,8 +1,9 @@
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
 
 from app.api.dependencies import get_current_user
 from app.core.config import settings
@@ -36,6 +37,19 @@ api_router = APIRouter(tags=["api-auth"])
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def is_secure_cookie(request: Request) -> bool:
+    if settings.COOKIE_SECURE:
+        return True
+    proto = request.headers.get("x-forwarded-proto", "").lower()
+    if proto == "https" or request.url.scheme == "https":
+        return True
+    origin = request.headers.get("origin", "").lower()
+    if origin.startswith("https://"):
+        return True
+    return False
+
 
 
 @router.post(
@@ -180,11 +194,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
 def login(
     payload: LoginRequest,
     response: Response,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     identifier = payload.email.strip()
     
-    # Lookup user by email OR shop phone_number OR shop account_ref
+    # Lookup user by email OR shop phone_number OR shop account_ref (Supports Admin, Salesperson, Customer)
     user = db.query(User).outerjoin(Shop).filter(
         (User.email == identifier.lower()) |
         (Shop.phone_number == identifier) |
@@ -198,14 +213,15 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    token_data = {"sub": str(user.id), "role": user.role}
+    access_token = create_access_token(data=token_data)
+    refresh_token = create_refresh_token(data=token_data)
 
     response.set_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
-        secure=settings.COOKIE_SECURE,
+        secure=is_secure_cookie(request),
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/",
@@ -215,13 +231,20 @@ def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@api_router.post("/api/v1/auth/refresh", response_model=TokenResponse)
 def refresh_token(
     response: Response,
+    request: Request,
     db: Session = Depends(get_db),
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_TOKEN_COOKIE_NAME),
     payload: RefreshTokenRequest | None = None,
 ) -> TokenResponse:
-    token = refresh_token or (payload.refresh_token if payload else None)
+    # 1. Attempt extracting refresh token from cookie or request body
+    token = refresh_token
+    if not token and settings.REFRESH_TOKEN_COOKIE_NAME in request.cookies:
+        token = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if not token and payload and payload.refresh_token:
+        token = payload.refresh_token
 
     if not token:
         raise HTTPException(
@@ -229,6 +252,7 @@ def refresh_token(
             detail="Refresh token missing",
         )
 
+    # 2. Validate token signature and expiration
     try:
         decoded = decode_refresh_token(token)
         user_id = decoded.get("sub")
@@ -243,21 +267,30 @@ def refresh_token(
             detail="Invalid or expired refresh token",
         ) from exc
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    # 3. Lookup user in database
+    try:
+        user = db.query(User).filter(User.id == int(user_id)).first()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User lookup failed",
+        )
+
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
 
-    new_access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    token_data = {"sub": str(user.id), "role": user.role}
+    new_access_token = create_access_token(data=token_data)
+    new_refresh_token = create_refresh_token(data=token_data)
 
     response.set_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
         value=new_refresh_token,
         httponly=True,
-        secure=settings.COOKIE_SECURE,
+        secure=is_secure_cookie(request),
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/",
@@ -267,15 +300,17 @@ def refresh_token(
 
 
 @router.post("/logout")
-def logout(response: Response) -> dict[str, str]:
+@api_router.post("/api/v1/auth/logout")
+def logout(response: Response, request: Request) -> dict[str, str]:
     response.delete_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
         path="/",
         httponly=True,
-        secure=settings.COOKIE_SECURE,
+        secure=is_secure_cookie(request),
         samesite="lax",
     )
     return {"detail": "Logged out successfully"}
+
 
 
 

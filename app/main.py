@@ -23,17 +23,30 @@ from app.utils.security import hash_password
 app = FastAPI(title="B2B Sage Ordering App API")
 
 # Configure CORS
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "https://localhost:3000",
+    "https://orbitfood.net",
+    "https://www.orbitfood.net",
+    "http://orbitfood.net",
+    "http://www.orbitfood.net",
+]
+
+# Allow additional origins from environment variable if configured
+custom_cors = os.environ.get("CORS_ORIGINS")
+if custom_cors:
+    origins.extend([origin.strip() for origin in custom_cors.split(",") if origin.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://orbitfood.net",
-        "https://www.orbitfood.net",
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
 )
 
 # Ensure base uploads directory exists
