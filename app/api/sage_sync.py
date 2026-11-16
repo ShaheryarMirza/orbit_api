@@ -10,6 +10,64 @@ from app.models.shop import Shop
 from app.models.product import Product
 from app.api.zynk_xml_utils import generate_zynk_sales_order_xml, generate_zynk_customer_xml, generate_zynk_product_xml, split_contact_name
 import os
+import re
+
+def parse_sage_order_number(element: ET.Element) -> str | None:
+    """
+    Extracts the Sage Sales Order Number from an XML element.
+    Checks tags <SalesOrderNumber>, <SageOrderNumber>, <OrderNumber>,
+    or parses from Zynk's 'Prevent Reprocessing' duplicate detection text.
+    """
+    for tag in ("SalesOrderNumber", "SageOrderNumber", "OrderNumber"):
+        node = element.find(tag) if element.find(tag) is not None else element.find(f".//{tag}")
+        if node is not None and node.text and node.text.strip():
+            val = node.text.strip()
+            if val.lower() not in ("null", "none", "0"):
+                return val
+
+    # Check for Zynk duplicate detection message:
+    # "Prevent duplicates is enabled and the Id 126 has already been specified on a sales order previously processed by this workflow. Please refer to sales order 129 in Sage 50 UK."
+    for text_val in element.itertext():
+        if text_val:
+            m = re.search(r"sales\s+order\s+(\d+)\s+in\s+Sage\s+50", text_val, re.IGNORECASE)
+            if m:
+                return m.group(1)
+            if "prevent reprocessing" in text_val.lower() or "prevent duplicates" in text_val.lower():
+                m2 = re.search(r"sales\s+order\s+(\d+)", text_val, re.IGNORECASE)
+                if m2:
+                    return m2.group(1)
+    return None
+
+def parse_sage_error_message(element: ET.Element) -> str:
+    """
+    Extracts meaningful error message from Zynk / Sage XML elements.
+    Handles <Errors><Error><Name>...</Name><Description>...</Description></Error></Errors>
+    as well as flat <Error> or <Message> elements.
+    """
+    desc_node = element.find(".//Description")
+    desc_text = desc_node.text.strip() if desc_node is not None and desc_node.text else ""
+
+    name_node = element.find(".//Name")
+    name_text = name_node.text.strip() if name_node is not None and name_node.text else ""
+
+    if desc_text and name_text and name_text.lower() not in desc_text.lower():
+        return f"{name_text}: {desc_text}"
+    if desc_text:
+        return desc_text
+    if name_text:
+        return name_text
+
+    msg_node = element.find(".//Message")
+    if msg_node is not None and msg_node.text and msg_node.text.strip():
+        return msg_node.text.strip()
+
+    err_node = element.find(".//Error")
+    if err_node is not None:
+        full_err = " ".join("".join(err_node.itertext()).split()).strip()
+        if full_err:
+            return full_err
+
+    return "Sync failed during Zynk Workflow execution."
 
 router = APIRouter(tags=["Sage Sync"])
 
@@ -178,24 +236,17 @@ async def update_sage_order_statuses(
         
         order = db.query(Order).filter(Order.id == order_id).first()
         if order:
-            sage_num = (sales_order_number_node.text or "").strip() if sales_order_number_node is not None else ""
+            sage_num = parse_sage_order_number(sales_order)
             
             if sage_num:
                 order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
                 order.sage_order_number = sage_num
                 order.sync_notes = None
             else:
-                # Sage 50 did not assign a Sales Order Number; do not mark as synced
-                err_node = sales_order.find("Error") or sales_order.find(".//Error")
-                msg_node = sales_order.find("Message") or sales_order.find(".//Message")
-                err_text = ""
-                if err_node is not None and err_node.text:
-                    err_text = err_node.text.strip()
-                elif msg_node is not None and msg_node.text:
-                    err_text = msg_node.text.strip()
-
+                # Sage 50 did not assign a Sales Order Number; record actual error
+                err_text = parse_sage_error_message(sales_order)
                 order.sage_sync_status = OrderSageSyncStatus.FAILED.value
-                order.sync_notes = err_text or "Sage 50 import did not return a Sales Order Number."
+                order.sync_notes = err_text
                 
             if account_reference_node is not None and account_reference_node.text:
                 order.account_ref = account_reference_node.text.strip()
@@ -242,34 +293,20 @@ async def record_sage_order_failures(
         if order.sage_sync_status == OrderSageSyncStatus.SYNCED.value and order.sage_order_number:
             continue
 
-        # Check if the item XML node itself actually indicates success
-        sales_order_number_node = (
-            item.find("SalesOrderNumber")
-            or item.find("SageOrderNumber")
-            or item.find("OrderNumber")
-        )
+        # Check if the XML contains a valid Sage Order Number or Prevent Reprocessing reference
+        sage_num = parse_sage_order_number(item)
         status_node = item.find("Status")
-        if (
-            (status_node is not None and status_node.text and status_node.text.lower() in ("success", "synced", "ok"))
-            or (sales_order_number_node is not None and sales_order_number_node.text)
-        ):
+        is_success_status = status_node is not None and status_node.text and status_node.text.lower() in ("success", "synced", "ok")
+
+        if sage_num or is_success_status:
             order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
-            if sales_order_number_node is not None and sales_order_number_node.text:
-                order.sage_order_number = sales_order_number_node.text
+            if sage_num:
+                order.sage_order_number = sage_num
             order.sync_notes = None
             continue
 
-        # Extract failure explanation if any
-        error_msg = ""
-        msg_node = item.find("Message")
-        err_node = item.find("Error")
-        
-        if msg_node is not None and msg_node.text:
-            error_msg = msg_node.text.strip()
-        elif err_node is not None and err_node.text:
-            error_msg = err_node.text.strip()
-        else:
-            error_msg = "Sync failed during Zynk Workflow execution."
+        # Extract meaningful failure explanation
+        error_msg = parse_sage_error_message(item)
 
         order.sage_sync_status = OrderSageSyncStatus.FAILED.value
         order.sync_notes = error_msg
