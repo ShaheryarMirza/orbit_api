@@ -178,16 +178,29 @@ async def update_sage_order_statuses(
         
         order = db.query(Order).filter(Order.id == order_id).first()
         if order:
-            order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
-            order.sync_notes = None
+            sage_num = (sales_order_number_node.text or "").strip() if sales_order_number_node is not None else ""
             
-            if sales_order_number_node is not None and sales_order_number_node.text:
-                order.sage_order_number = sales_order_number_node.text
+            if sage_num:
+                order.sage_sync_status = OrderSageSyncStatus.SYNCED.value
+                order.sage_order_number = sage_num
+                order.sync_notes = None
+            else:
+                # Sage 50 did not assign a Sales Order Number; do not mark as synced
+                err_node = sales_order.find("Error") or sales_order.find(".//Error")
+                msg_node = sales_order.find("Message") or sales_order.find(".//Message")
+                err_text = ""
+                if err_node is not None and err_node.text:
+                    err_text = err_node.text.strip()
+                elif msg_node is not None and msg_node.text:
+                    err_text = msg_node.text.strip()
+
+                order.sage_sync_status = OrderSageSyncStatus.FAILED.value
+                order.sync_notes = err_text or "Sage 50 import did not return a Sales Order Number."
                 
             if account_reference_node is not None and account_reference_node.text:
-                order.account_ref = account_reference_node.text
+                order.account_ref = account_reference_node.text.strip()
                 if order.shop:
-                    order.shop.account_ref = account_reference_node.text
+                    order.shop.account_ref = account_reference_node.text.strip()
                 
     db.commit()
     
@@ -225,8 +238,8 @@ async def record_sage_order_failures(
         if not order:
             continue
 
-        # Protect orders that are already marked SYNCED or have a Sage Order Number
-        if order.sage_sync_status == OrderSageSyncStatus.SYNCED.value or order.sage_order_number:
+        # Protect orders that are already genuinely SYNCED with a valid Sage Order Number
+        if order.sage_sync_status == OrderSageSyncStatus.SYNCED.value and order.sage_order_number:
             continue
 
         # Check if the item XML node itself actually indicates success

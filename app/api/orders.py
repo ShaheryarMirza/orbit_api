@@ -600,14 +600,20 @@ def retry_order_sage_sync(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cancelled orders cannot be retried for Sage sync",
         )
-    if order.sage_sync_status != OrderSageSyncStatus.FAILED.value:
+    allowed_to_retry = (
+        order.sage_sync_status == OrderSageSyncStatus.FAILED.value
+        or (order.sage_sync_status == OrderSageSyncStatus.SYNCED.value and not order.sage_order_number)
+    )
+    if not allowed_to_retry:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only failed Sage sync orders can be retried",
+            detail="Only failed Sage sync orders or orders without a verified Sage Order Number can be retried",
         )
 
     order.sage_sync_status = OrderSageSyncStatus.PENDING.value
     order.sage_sales_order_id = None
+    order.sage_order_number = None
+    order.sync_notes = None
     db.commit()
     db.refresh(order)
     return order

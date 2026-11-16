@@ -101,6 +101,8 @@ class OrderResponse(BaseModel):
     status: str
     sage_sales_order_id: str | None
     sage_sync_status: str
+    sage_order_number: str | None = None
+    sync_notes: str | None = None
     account_ref: str | None = None
     created_at: datetime
     updated_at: datetime
